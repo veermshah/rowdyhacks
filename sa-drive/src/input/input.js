@@ -7,6 +7,8 @@ export const input = {
 
   gearReset: 0,
   reverse: false, // gear request, independent of wheel rotation
+  rearView: false,
+  rearViewUpdatedAt: 0,
   gas: 0,          // 0..1
   brake: 0,        // 0..1
 

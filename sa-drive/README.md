@@ -28,10 +28,10 @@ If you are developing a production application, we recommend using TypeScript wi
 
 Gear changes brake through zero; reverse is capped at 30% of the current speed
 limit. Hand-mode forward throttle reaches normal cruising speed for pursuit.
-The police cruiser starts 80 road meters behind the player, follows A* waypoints,
-replans every 0.8 seconds, and stops the game on physical vehicle contact.
+The police cruiser starts approximately 185 road meters behind the player after a four-second grace period, follows A* waypoints,
+replans every 1.05-1.45 seconds, and stops the game on physical vehicle contact.
 Building collision stays active in both gears and for the police. A clear final
-approach from a road lets police catch cars stopped on the shoulder or open terrain.
+approach within the road boundary lets police catch cars stopped on the shoulder.
 
 Navigation uses the exported OSM road network, built once on map load with
 shared intersection vertices and building-clearance checks. The supplied export
@@ -39,9 +39,9 @@ has no one-way metadata, so its roads are bidirectional; the graph also supports
 oneway metadata when present. Roads retain their existing widths and centerlines.
 
 The beveled arrow follows the road route with 20-55 m speed-sensitive lookahead.
-Distance is remaining driving distance. The cyan world ribbon and minimap read
+Distance is remaining driving distance. The mint-green world ribbon (16% of road width) and minimap read
 one shared route; wrong turns trigger throttled recalculation. Amber minimap pins
-show the actual landmarks, cyan endpoint rings show drivable access, and red/blue
+show the actual landmarks, mint endpoint rings show drivable access, and red/blue
 markers show the police. Landmarks in pedestrian areas use the nearest reachable
 road access, explicitly labeled at arrival; guidance never points through buildings.
 
@@ -50,6 +50,7 @@ Validation:
 ```sh
 node scripts/validate-driving.mjs
 node scripts/validate-gameplay.mjs
+node scripts/validate-rear-pursuit.mjs
 npm run lint
 npm run build
 ```
@@ -62,6 +63,35 @@ player capture, moving pursuit through intersections, rerouting and restart.
 
 Chrome smoke test at 1440x900 verified the route UI, keyboard reverse, caught
 controls freeze and restart. The short local driving sample reported 60 FPS and
-39 draw calls with no runtime errors. Hardware performance varies. Live webcam
+45 draw calls with no runtime errors. Hardware performance varies. Live webcam
 finger detection/calibration still needs a hands-on check. The build retains a
 large-chunk advisory (about 350 kB gzip).
+
+Initial spawns align to the chosen route with police behind; changing destinations
+before moving during the grace period also aligns the start. The River Walk uses
+the OSM river centerline, a stencil-cut channel, water at -2.95 m, pedestrian
+walkways at -2.15 m, retaining walls, and merged stone bridges and props.
+Procedural landmark meshes replace their generic OSM buildings and collision
+footprints. The Alamo faces west; the Tower has a fluted shaft and tiered crown.
+
+
+### Rear glance and pursuit difficulty
+Hold a clear thumbs-up with either hand for 200 ms to look behind. Curl the
+other four fingers and point the extended thumb upward. Release for 160 ms to
+return. Camera position and rotation ease between views in roughly 200 ms.
+Both hands can remain tracked for wheel steering. A glance holds the current
+forward/reverse gear; it does not change steering or throttle. Tracking loss
+releases the camera, and restart clears the gesture.
+
+Police tuning is centralized in src/config/policeConfig.js: 80% cruising speed,
+95% against a slow/stopped player, 4 m/s2 acceleration, delayed route updates,
+75% moderate-turn speed and 58% sharp-turn speed. Sharp turns also introduce a
+short hesitation with bounded yaw speed. No rubber-banding boost is used.
+Valid initial pursuit distance is 170-220 m, normally 185 m, with four seconds
+of grace. The 0.5 difficulty label is a tuning target, not a measured catch rate.
+
+The latest browser check verified smooth rear/forward transitions, a police
+car behind the camera's rear-facing direction, steering in reverse during a
+rear glance, caught state and restart; sampled 60 FPS and 45-50 draw calls.
+Automated gesture tests use synthetic landmarks; live webcam testing remains
+a manual check across lighting conditions and hand shapes.

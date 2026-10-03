@@ -46,7 +46,7 @@ export function buildRoadGrid(roads) {
  * Find distance from point to nearest road segment.
  * Returns { distance, onRoad, nearestX, nearestZ }
  */
-export function queryNearestRoad(grid, x, z) {
+export function queryNearestRoad(grid, x, z, margin = 0) {
   const { cx, cz } = toCell(x, z);
   const key = cellKey(cx, cz);
   const cell = grid.get(key);
@@ -76,7 +76,7 @@ export function queryNearestRoad(grid, x, z) {
     const nz = az + t * dz;
     const dist = Math.sqrt((x - nx) * (x - nx) + (z - nz) * (z - nz));
 
-    if (dist <= width / 2) onRoad = true;
+    if (dist <= width / 2 + margin) onRoad = true;
     if (dist < minDist) {
       minDist = dist;
       bestNx = nx;

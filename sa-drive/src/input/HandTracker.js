@@ -1,5 +1,6 @@
-import { createGearGesture, updateGearGesture } from './gestures.js';
+import { createGearGesture, updateGearGesture, isThumbsUp,createRearGesture,updateRearGesture } from './gestures.js';
 const gearGesture=createGearGesture();
+const rearGesture=createRearGesture();
 let gearReset=-1;
 import { FilesetResolver, HandLandmarker } from '@mediapipe/tasks-vision';
 import { HAND_CONFIG } from '../config/handConfig.js';
@@ -62,6 +63,7 @@ export function startTracking() {
 
 export function stopTracking() {
   running = false;
+  input.rearView=false;Object.assign(rearGesture,createRearGesture());
 }
 
 function trackLoop() {
@@ -93,8 +95,11 @@ function trackLoop() {
 }
 
 function processResults(results, timestamp) {
-  if(gearReset!==input.gearReset){Object.assign(gearGesture,createGearGesture());gearReset=input.gearReset;}
+  if(gearReset!==input.gearReset){Object.assign(gearGesture,createGearGesture());Object.assign(rearGesture,createRearGesture());gearReset=input.gearReset;}
   const landmarks = results.landmarks;
+  const thumb=!calibrating&&(landmarks||[]).some((hand,i)=>isThumbsUp(results.worldLandmarks?.[i]||hand,hand));
+  input.rearView=updateRearGesture(rearGesture,thumb,timestamp);
+  input.rearViewUpdatedAt=timestamp;
 
   if (!landmarks || landmarks.length < 2) {
     updateGearGesture(gearGesture,null,timestamp);
@@ -131,7 +136,9 @@ function processResults(results, timestamp) {
   }
 
   if(!calibrating && input.mode==='hands') {
-    input.reverse=updateGearGesture(gearGesture,results.worldLandmarks?.length===2?results.worldLandmarks:landmarks,timestamp);
+    // A rear glance holds the current gear: making a fist for thumbs-up must
+    // not cancel reverse. Wheel position continues through the usual filter.
+    input.reverse=updateGearGesture(gearGesture,thumb||rearGesture.active?null:(results.worldLandmarks?.length===2?results.worldLandmarks:landmarks),timestamp);
   }
   // Calculate mirrored palm centers
   const palms = landmarks.map(hand => mirrorPalm(palmCenter(hand)));
@@ -195,6 +202,7 @@ export function startCalibration() {
   return new Promise((resolve) => {
     calibrating = true;
     Object.assign(gearGesture,createGearGesture());input.reverse=false;
+    Object.assign(rearGesture,createRearGesture());input.rearView=false;
     calibrationSamples = [];
     onCalibrationDone = resolve;
     steerFilter?.reset();

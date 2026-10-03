@@ -1,3 +1,4 @@
+import { ROUTE_COLOR } from '../config/routeStyle.js';
 import { guidance,game } from '../game/runtime.js';
 import { useEffect, useRef } from 'react';
 import { destinations, navigation } from '../config/navigation.js';
@@ -69,10 +70,10 @@ export default function Minimap({ roads }) {
       }
 
       const points=guidance.route?.points||[];
-      if(points.length){ctx.strokeStyle='#58fff1';ctx.lineWidth=3;ctx.lineJoin='round';ctx.beginPath();points.forEach((p,i)=>{const x=SIZE/2+(p.x-car.x)*SCALE,y=SIZE/2+(p.z-car.z)*SCALE;if(i)ctx.lineTo(x,y);else ctx.moveTo(x,y);});ctx.stroke();}
+      if(points.length){ctx.strokeStyle=ROUTE_COLOR;ctx.lineWidth=2;ctx.lineJoin='round';ctx.beginPath();points.forEach((p,i)=>{const x=SIZE/2+(p.x-car.x)*SCALE,y=SIZE/2+(p.z-car.z)*SCALE;if(i)ctx.lineTo(x,y);else ctx.moveTo(x,y);});ctx.stroke();}
       if(game.police){const x=SIZE/2+(game.police.x-car.x)*SCALE,y=SIZE/2+(game.police.z-car.z)*SCALE;ctx.fillStyle='#ff4e75';ctx.fillRect(x-4,y-3,4,6);ctx.fillStyle='#58aaff';ctx.fillRect(x,y-3,4,6);}
       const access=guidance.route?.endpoint;
-      if(access){ctx.strokeStyle='#58fff1';ctx.lineWidth=1.5;ctx.beginPath();ctx.arc(SIZE/2+(access.x-car.x)*SCALE,SIZE/2+(access.z-car.z)*SCALE,4,0,Math.PI*2);ctx.stroke();}
+      if(access){ctx.strokeStyle=ROUTE_COLOR;ctx.lineWidth=1.5;ctx.beginPath();ctx.arc(SIZE/2+(access.x-car.x)*SCALE,SIZE/2+(access.z-car.z)*SCALE,4,0,Math.PI*2);ctx.stroke();}
       const destination=destinations[navigation.selected];
       const dx=(destination.x-car.x)*SCALE,dz=(destination.z-car.z)*SCALE;
       const factor=Math.min(1,(SIZE/2-12)/Math.max(Math.abs(dx),Math.abs(dz),1));

@@ -18,14 +18,15 @@ import { initKeyboard, cleanupKeyboard } from './input/keyboard.js';
 import { FOG_COLOR, toLocal } from './config/worldConfig.js';
 import { roadWidth, isDrivable } from './config/roadConfig.js';
 import { buildBuildingGrid, safeRoadSpawn } from './lib/collision.js';
-import { landmarkObstacles } from './config/landmarkConfig.js';
+import { landmarkObstacles, LANDMARK_OSM_REPLACEMENTS, LANDMARKS } from './config/landmarkConfig.js';
 import Navigation from './ui/Navigation.jsx';
 import StreetProps from './world/StreetProps.jsx';
 import { buildRoadGraph } from './lib/roadGraph.js';
 import { game,initializeGame } from './game/runtime.js';
 import Gameplay from './game/Gameplay.jsx';
 import PursuitHud from './ui/PursuitHud.jsx';
-import { buildRoadGrid } from './lib/grid.js';
+import { buildRiverNetwork, riverObstacles } from './lib/riverNetwork.js';
+import { buildRoadGrid, queryNearestRoad } from './lib/grid.js';
 
 export default function App() {
   const videoRef = useRef(null);
@@ -50,17 +51,20 @@ export default function App() {
       .then(data => {
         if (!active) return;
         data.roads = data.roads.map(r => ({ ...r, width: roadWidth(r), drivable: isDrivable(r) }));
-        const obstacles = buildBuildingGrid([...data.buildings,...landmarkObstacles()]);
+        data.buildings = data.buildings.filter(b=>!LANDMARK_OSM_REPLACEMENTS.has(b.id));
+        const grid = buildRoadGrid(data.roads);
+        data.river = buildRiverNetwork(data.water);
+        data.collisionObstacles = [...data.buildings,...landmarkObstacles(),...riverObstacles(data.river,grid,queryNearestRoad)];
+        const obstacles = buildBuildingGrid(data.collisionObstacles);
         setBuildingGrid(obstacles);
         setMapData(data);
 
         // Build spatial grid
-        const grid = buildRoadGrid(data.roads);
         gridRef.current = grid;
         setRoadGrid(grid);
 
         // Spawn car near the Alamo
-        const alamoLocal = toLocal(29.4260, -98.4861);
+        const alamoLocal = toLocal(LANDMARKS.alamo.lat, LANDMARKS.alamo.lon);
         const spawn = safeRoadSpawn(data.roads, obstacles, alamoLocal);
         if (!spawn) throw new Error('No clear road spawn found');
         car.safePosition = spawn;
@@ -94,6 +98,7 @@ export default function App() {
 
       <Canvas
         dpr={[1, 1.5]}
+        gl={{ stencil: true }}
         shadows
         camera={{ fov: 60, near: 0.5, far: 700 }}
         style={{ width: '100vw', height: '100vh' }}
@@ -121,11 +126,11 @@ export default function App() {
 
         {mapData && (
           <>
-            <Roads roads={mapData.roads} />
+            <Roads roads={mapData.roads} river={mapData.river} />
             <Buildings buildings={mapData.buildings} />
-            <River water={mapData.water} />
-            <Trees roads={mapData.roads} buildings={mapData.buildings} bounds={treeBounds} />
-            <StreetProps roads={mapData.roads} buildings={mapData.buildings} />
+            <River network={mapData.river} roads={mapData.roads} buildings={mapData.buildings} />
+            <Trees roads={mapData.roads} buildings={mapData.collisionObstacles} bounds={treeBounds} />
+            <StreetProps roads={mapData.roads} buildings={mapData.collisionObstacles} />
           </>
         )}
 

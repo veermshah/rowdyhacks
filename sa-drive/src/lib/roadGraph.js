@@ -107,7 +107,7 @@ export function routeProgress(points,position,lookahead=30) {
   for(let i=best.index;i<points.length;i++){const len=distance(point,points[i]);if(len>=left){point={x:point.x+(points[i].x-point.x)*left/(len||1),z:point.z+(points[i].z-point.z)*left/(len||1)};left=0;break;}left-=len;point=points[i];}
   return {...best,point,remaining};
 }
-export function policeSpawn(graph,player,meters=80) {
+export function policeSpawn(graph,player,meters=185) {
   const snap=nearestEdge(graph,player);if(!snap)return null;
   // Traverse predecessor edges away from the player. Reversing this walk is a
   // valid pursuit path even when the source provides directed roads.
@@ -122,7 +122,7 @@ export function policeSpawn(graph,player,meters=80) {
       options.sort((a,b)=>{const score=id=>{const n=graph.nodes[id];const dx=distance(at,previous)<.1?-Math.sin(player.yaw):at.x-previous.x,dz=distance(at,previous)<.1?-Math.cos(player.yaw):at.z-previous.z;return (dx*(n.x-at.x)+dz*(n.z-at.z))/(distance(at,n)||1);};return score(b)-score(a);});
       const next=options[0];length+=distance(at,graph.nodes[next]);path.push(graph.nodes[next]);seen.add(next);current=next;
     }
-    if(length<60)continue;
+    if(length<Math.min(150,meters))continue;
     let walked=0;for(let i=1;i<path.length;i++){const len=distance(path[i-1],path[i]);if(walked+len>=meters){const t=(meters-walked)/len,a=path[i-1],b=path[i];return {x:a.x+(b.x-a.x)*t,z:a.z+(b.z-a.z)*t,yaw:Math.atan2(a.x-b.x,a.z-b.z),distance:meters};}walked+=len;}
     const a=path.at(-1),b=path.at(-2);return {x:a.x,z:a.z,yaw:Math.atan2(b.x-a.x,b.z-a.z),distance:length};
   }

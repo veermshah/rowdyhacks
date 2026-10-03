@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { RoundedBox } from '@react-three/drei';
 import * as THREE from 'three';
+import { ROUTE_COLOR } from '../config/routeStyle.js';
 import { buildRouteRibbon } from '../lib/routeRibbon.js';
 import { game,guidance,tickGame } from './runtime.js';
 function RouteOverlay(){
@@ -11,7 +12,7 @@ function RouteOverlay(){
     const data=buildRouteRibbon(guidance.route?.points||[]),geometry=new THREE.BufferGeometry();geometry.setAttribute('position',new THREE.BufferAttribute(data.positions,3));geometry.setIndex(data.indices);geometry.computeVertexNormals();
     mesh.current.geometry=geometry;return()=>geometry.dispose();
   },[version]);
-  return <mesh ref={mesh} renderOrder={2}><meshBasicMaterial color="#37e5eb" transparent opacity={.48} depthWrite={false} side={THREE.DoubleSide} toneMapped={false}/></mesh>;
+  return <mesh ref={mesh} renderOrder={2}><meshBasicMaterial color={ROUTE_COLOR} transparent opacity={.72} depthWrite={false} side={THREE.DoubleSide} toneMapped={false}/></mesh>;
 }
 function PoliceCar(){
   const group=useRef(),red=useRef(),blue=useRef();

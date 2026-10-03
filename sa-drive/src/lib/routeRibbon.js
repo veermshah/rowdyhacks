@@ -1,3 +1,4 @@
+import { ROUTE_WIDTH_RATIO } from '../config/routeStyle.js';
 // A continuous, variable-width ribbon. Shared mitered vertices avoid cracks
 // and transparent overlap seams between the route's short graph edges.
 export function buildRouteRibbon(points,y=.115){
@@ -10,7 +11,7 @@ export function buildRouteRibbon(points,y=.115){
     ax/=al||1;az/=al||1;bx/=bl||1;bz/=bl||1;
     let nx=-az-bz,nz=ax+bx;const nl=Math.hypot(nx,nz);
     if(nl<.001){nx=-bz;nz=bx;}else{nx/=nl;nz/=nl;}
-    const half=Math.max(2.5,(at.width||12)*.36)/2;
+    const half=((at.width||12)*ROUTE_WIDTH_RATIO)/2;
     const miter=half/Math.max(.55,Math.abs(nx*(-bz)+nz*bx));
     positions.push(at.x-nx*miter,y,at.z-nz*miter,at.x+nx*miter,y,at.z+nz*miter);
     if(i){const k=(i-1)*2;indices.push(k,k+1,k+2,k+1,k+3,k+2);}
