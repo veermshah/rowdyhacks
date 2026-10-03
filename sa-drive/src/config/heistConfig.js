@@ -1,0 +1,23 @@
+import { LANDMARKS } from './landmarkConfig.js';
+import { toLocal } from './worldConfig.js';
+
+// import.meta.env is Vite-only; plain Node (scripts/validate-*.mjs) imports this too.
+const env = import.meta.env ?? {};
+
+// Flask-SocketIO Riverwalk server (see /server). Set VITE_HEIST_SERVER_URL on Vercel.
+export const HEIST_SERVER_URL = env.VITE_HEIST_SERVER_URL || 'http://localhost:5000';
+
+// Dev-only UI: force-open button, simulate buttons, reset. On in `npm run dev`;
+// opt in on a deployed build with VITE_HEIST_DEV_TOOLS=true.
+export const HEIST_DEV_TOOLS = !!env.DEV || env.VITE_HEIST_DEV_TOOLS === 'true';
+
+// Riverwalk checkpoint: the challenge opens when the car gets within TRIGGER
+// meters and can only re-open after it has driven back out past EXIT meters.
+// The nearest drivable road (a bridge) passes ~4 m from this point.
+export const RIVERWALK_POINT = toLocal(LANDMARKS.riverWalk.lat, LANDMARKS.riverWalk.lon);
+export const RIVERWALK_TRIGGER_RADIUS = 30;
+export const RIVERWALK_EXIT_RADIUS = 45;
+
+export const MAX_WANTED_LEVEL = 5;
+// Each wanted star makes the police cruiser this much faster (5 stars = +25%).
+export const WANTED_POLICE_SPEED_BONUS = 0.05;

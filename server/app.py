@@ -45,14 +45,13 @@ except Exception:  # missing wheel for this Python version, etc.
 # --------------------------------------------------------------------------- #
 # Tunables
 # --------------------------------------------------------------------------- #
-RIVERWALK_REWARD = 25_000
+RIVERWALK_REWARD = 5_000
 MAX_ATTEMPTS = 3
 MAX_WANTED_LEVEL = 5
-STEP_TIMEOUT_S = 15.0
+STEP_TIMEOUT_S = 20.0           # per step; only live frames tick it, dev buttons never time out
 FACE_CONFIRM_FRAMES = 5         # consecutive frames with a face before "face detected" ticks
 FACE_LOST_GRACE_S = 0.4         # how long without a face before we pause
 FRAME_GAP_PAUSE_S = 1.0         # no frames for this long (tab hidden, camera off) = paused time
-STEP_GRACE_S = 0.6              # ignore "wrong" actions right after a step changes
 FAIL_COOLDOWN_S = 1.5           # ignore everything right after a failure
 
 NOD_DELTA = 0.07                # nose must move this many face-heights away from baseline...
@@ -72,8 +71,17 @@ MAX_FRAME_BYTES = 512 * 1024
 NFC_MAX_AMOUNT = 10_000
 NFC_SECRET = os.environ.get("NFC_SECRET", "")
 PRESAGE_API_KEY = os.environ.get("PRESAGE_API_KEY", "")
+# Enables the simulate / dev_reset_car socket events. Set RIVERWALK_DEV_MODE=0 in production.
+DEV_MODE = os.environ.get("RIVERWALK_DEV_MODE", "1") != "0"
 
 STEPS = ["face", "nod", "blink", "smile"]
+# Prompts echo the clue: "Acknowledge the guard, signal twice, and look pleased."
+PROMPTS = {
+    "face": "Face the guard's camera.",
+    "nod": "Acknowledge the guard.",
+    "blink": "Signal twice.",
+    "smile": "Look pleased.",
+}
 
 
 # --------------------------------------------------------------------------- #
@@ -261,7 +269,15 @@ class SmileTracker:
 class RiverwalkChallenge:
     """status: idle | active | paused | alarm | complete
 
-    update() returns a list of event names ("failed", "alarm", "complete") so the
+    Rules:
+      * Steps must happen in order: face -> nod -> blink x2 -> smile.
+      * Out-of-order actions (e.g. smiling while the step is "nod") are ignored:
+        no progress, no failure, no reset.
+      * A failed attempt is running out the step timer (live camera only) or a
+        dev "fail" input. Each failure resets the sequence; MAX_ATTEMPTS failures
+        trip the alarm.
+
+    update()/simulate() return event names ("failed", "alarm", "complete") so the
     socket layer can apply side effects (wanted level, loot) to the shared car.
     """
 
@@ -281,7 +297,6 @@ class RiverwalkChallenge:
         self.face_frames = 0
         self.lost_since = None
         self.paused_at = None
-        self.step_started = 0.0
         self.deadline = float("inf")
         self.cooldown_until = 0.0
         self.nod = NodTracker()
@@ -294,23 +309,20 @@ class RiverwalkChallenge:
         self.status = "active"
         self._reset_sequence()
         self._enter_step(0, now)
-        self.message = "Face the vault camera."
 
     def _enter_step(self, step, now):
         self.step = step
-        self.step_started = now
         self.deadline = now + STEP_TIMEOUT_S
-        if STEPS[step] == "nod":
+        name = STEPS[step]
+        if name == "nod":
             self.nod.reset()
-            self.message = "Nod your head."
-        elif STEPS[step] == "blink":
+        elif name == "blink":
             self.blink.reset()
             self.blinks = 0
             self.first_blink_at = None
-            self.message = "Blink twice."
-        elif STEPS[step] == "smile":
+        elif name == "smile":
             self.smile.reset()
-            self.message = "Smile for the camera."
+        self.message = PROMPTS[name]
 
     def _fail(self, reason, now):
         self.failures += 1
@@ -326,13 +338,38 @@ class RiverwalkChallenge:
         self.message = f"{reason} Sequence reset - {left} attempt{'s' if left != 1 else ''} left."
         return ["failed"]
 
+    def _complete(self):
+        self.status = "complete"
+        self.step = len(STEPS)
+        self.message = "Vault open! Riverwalk cash secured."
+        return ["complete"]
+
+    def _register_blink(self, now):
+        self.blinks += 1
+        if self.blinks == 1:
+            self.first_blink_at = now
+            self.message = "One more..."
+        else:
+            self._enter_step(3, now)
+
+    def _resume(self, now):
+        self.status = "active"
+        if self.paused_at is not None:
+            self.deadline += now - self.paused_at
+        self.paused_at = None
+        self.lost_since = None
+        self.nod.reset()  # the head moved; re-learn its resting position
+        self.blink.reset()
+        self.smile.reset()
+
     def update(self, sig, now):
+        """Advance the sequence from one live camera frame."""
         self._last_signals = sig
         if self.status not in ("active", "paused"):
             return []
 
         # Frames stopped arriving (tab hidden, camera unplugged): don't burn the timer.
-        # (While paused, the resume branch below already credits the lost time.)
+        # (While paused, _resume() already credits the lost time.)
         if self.status == "active" and self._last_update is not None and now - self._last_update > FRAME_GAP_PAUSE_S:
             gap = now - self._last_update
             self.deadline += gap
@@ -351,65 +388,61 @@ class RiverwalkChallenge:
 
         self.lost_since = None
         if self.status == "paused":
-            self.status = "active"
-            self.deadline += now - self.paused_at
-            self.paused_at = None
-            self.nod.reset()  # the head moved; re-learn its resting position
-            self.blink.reset()
-            self.smile.reset()
-            self.message = "Tracking restored. " + self._prompt()
+            self._resume(now)
+            self.message = "Tracking restored. " + PROMPTS[STEPS[self.step]]
 
-        # Feed every tracker every frame so out-of-order actions can be caught.
+        # Trackers run every frame so a gesture already in motion isn't lost at a
+        # step boundary; only the gesture matching the current step is acted on.
         nodded = self.nod.update(sig.nose_y, sig.face_h, now)
         blinked = self.blink.update(sig.blink, now)
         smiling = self.smile.update(sig.smile)
 
         if now < self.cooldown_until:
             return []
-        in_grace = now - self.step_started < STEP_GRACE_S
         step = STEPS[self.step]
-
-        if now > self.deadline and step != "face":
-            return self._fail("Too slow!", now)
+        if step != "face" and now > self.deadline:
+            return self._fail("Too slow - the guard got suspicious!", now)
 
         if step == "face":
             self.face_frames += 1
             if self.face_frames >= FACE_CONFIRM_FRAMES:
                 self._enter_step(1, now)
-        elif step == "nod":
-            if smiling and not in_grace:
-                return self._fail("Smiled too early!", now)
-            if nodded:
-                self._enter_step(2, now)
+        elif step == "nod" and nodded:
+            self._enter_step(2, now)
         elif step == "blink":
-            if not in_grace and smiling:
-                return self._fail("Smiled too early!", now)
-            if not in_grace and nodded:
-                return self._fail("Wrong move - that was a nod!", now)
             if self.first_blink_at is not None and now - self.first_blink_at > DOUBLE_BLINK_WINDOW_S:
                 self.blinks = 0
                 self.first_blink_at = None
-                self.message = "Too slow between blinks - blink twice, quickly."
+                self.message = "Too slow between signals - do both quickly."
             if blinked:
-                self.blinks += 1
-                if self.blinks == 1:
-                    self.first_blink_at = now
-                    self.message = "One more blink..."
-                else:
-                    self._enter_step(3, now)
-        elif step == "smile":
-            if not in_grace and nodded:
-                return self._fail("Wrong move - that was a nod!", now)
-            if smiling:
-                self.status = "complete"
-                self.step = len(STEPS)
-                self.message = "Vault open! Riverwalk cash secured."
-                return ["complete"]
+                self._register_blink(now)
+        elif step == "smile" and smiling:
+            return self._complete()
         return []
 
-    def _prompt(self):
-        return {"face": "Face the vault camera.", "nod": "Nod your head.",
-                "blink": "Blink twice.", "smile": "Smile for the camera."}.get(STEPS[min(self.step, 3)], "")
+    def simulate(self, action, now):
+        """Dev input: one of face | nod | blink | smile | fail. Same rules as live input."""
+        if self.status in ("idle", "complete"):
+            self.start(now)
+        if self.status == "alarm":
+            return []
+        if self.status == "paused":
+            self._resume(now)
+        if action == "fail":
+            return self._fail("Wrong signal!", now)
+
+        step = STEPS[self.step]
+        if action != step:
+            return []  # out of order: ignored
+        if step == "face":
+            self._enter_step(1, now)
+        elif step == "nod":
+            self._enter_step(2, now)
+        elif step == "blink":
+            self._register_blink(now)
+        elif step == "smile":
+            return self._complete()
+        return []
 
     def snapshot(self, now):
         if self.status == "paused" and self.paused_at is not None:
@@ -430,6 +463,7 @@ class RiverwalkChallenge:
             "failures": self.failures,
             "maxAttempts": MAX_ATTEMPTS,
             "timeLeft": time_left,
+            "stepTimeout": STEP_TIMEOUT_S,
             "message": self.message,
             "lastFailReason": self.last_fail_reason,
             "debug": {
@@ -562,6 +596,7 @@ def health():
         detector=detector_name(),
         models=sorted(MODELS),
         presageConfigured=bool(PRESAGE_API_KEY),
+        devMode=DEV_MODE,
         asyncMode=socketio.async_mode,
     )
 
@@ -623,23 +658,61 @@ def on_frame(data):
         events = s.challenge.update(sig, now)
         snap = s.challenge.snapshot(now)
 
+    _apply_events(s, events, snap)
+    return snap
+
+
+def _apply_events(s, events, snap):
+    """Side effects of challenge events on the shared car (both players see them)."""
     car = get_car(s.car_id)
+    room = f"car:{s.car_id}"
     if "alarm" in events:
         with state_lock:
             car.wanted_level = min(MAX_WANTED_LEVEL, car.wanted_level + 1)
-        socketio.emit("alarm", {"reason": snap["lastFailReason"], "wantedLevel": car.wanted_level},
-                      to=f"car:{s.car_id}")
+        socketio.emit("alarm", {"reason": snap["lastFailReason"], "wantedLevel": car.wanted_level}, to=room)
         broadcast_car(s.car_id)
     if "complete" in events:
+        # Cash and heat are awarded once per car; a cleared vault stays cleared.
         with state_lock:
             first = not car.riverwalk_cleared
             car.riverwalk_cleared = True
             if first:
                 car.loot += RIVERWALK_REWARD
+                car.wanted_level = min(MAX_WANTED_LEVEL, car.wanted_level + 1)
         socketio.emit("reward", {"source": "riverwalk_vault", "amount": RIVERWALK_REWARD if first else 0,
-                                 "loot": car.loot}, to=f"car:{s.car_id}")
+                                 "loot": car.loot, "wantedLevel": car.wanted_level}, to=room)
         broadcast_car(s.car_id)
+
+
+@socketio.on("simulate")
+def on_simulate(data):
+    """Dev buttons: {"action": "face" | "nod" | "blink" | "smile" | "fail"}."""
+    if not DEV_MODE:
+        return {"error": "dev mode disabled"}
+    action = (data or {}).get("action") if isinstance(data, dict) else data
+    if action not in (*STEPS, "fail"):
+        return {"error": f"unknown action {action!r}"}
+    s = _session()
+    with s.lock:
+        now = time.monotonic()
+        events = s.challenge.simulate(action, now)
+        snap = s.challenge.snapshot(now)
+    _apply_events(s, events, snap)
     return snap
+
+
+@socketio.on("dev_reset_car")
+def on_dev_reset_car(*_):
+    """Dev: zero this car's loot/wanted level and re-lock the vault so it can be replayed."""
+    if not DEV_MODE:
+        return {"error": "dev mode disabled"}
+    s = _session()
+    with state_lock:
+        cars[s.car_id] = CarState()
+    with s.lock:
+        s.challenge = RiverwalkChallenge()
+    broadcast_car(s.car_id)
+    return {"ok": True}
 
 
 @socketio.on("reset_challenge")

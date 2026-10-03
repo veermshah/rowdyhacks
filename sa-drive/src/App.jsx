@@ -27,6 +27,7 @@ import Gameplay from './game/Gameplay.jsx';
 import PursuitHud from './ui/PursuitHud.jsx';
 import { buildRiverNetwork, riverObstacles } from './lib/riverNetwork.js';
 import { buildRoadGrid, queryNearestRoad } from './lib/grid.js';
+import HeistLayer from './heist/HeistLayer.jsx';
 
 export default function App() {
   const videoRef = useRef(null);
@@ -157,6 +158,7 @@ export default function App() {
       <Hud />
       {started && <PursuitHud />}
       <DebugPanel />
+      <HeistLayer videoRef={videoRef} />
     </>
   );
 }

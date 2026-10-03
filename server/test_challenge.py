@@ -10,6 +10,7 @@ import app as server
 from app import FaceSignals, RiverwalkChallenge
 
 DT = 1 / 15  # simulate 15 fps
+STEP = lambda c: c.snapshot(0)["step"]
 
 
 class Sim:
@@ -57,25 +58,44 @@ def test_happy_path_completes():
     assert all(s.c.snapshot(s.t)["checklist"].values())
 
 
-def test_smiling_early_resets_sequence_and_counts_failure():
-    s = Sim().idle(1.5).smile()
-    assert s.events == ["failed"]
-    assert s.c.failures == 1
-    assert s.step == "face"
-
-
-def test_nod_during_blink_step_is_wrong_action():
-    s = Sim().idle(1.2).nod().idle(0.7).nod()
-    assert "failed" in s.events
-    assert s.step == "face"
+def test_out_of_order_actions_are_ignored():
+    s = Sim().idle(1.2)
+    assert s.step == "nod"
+    s.smile().blink().blink()  # wrong gestures for the "nod" step
+    assert s.step == "nod" and s.c.failures == 0 and s.events == []
+    s.nod().idle(0.7).nod().smile()  # extra nod / early smile during "blink"
+    assert s.step == "blink" and s.c.blinks == 0 and s.c.failures == 0
 
 
 def test_three_failures_trigger_alarm():
     s = Sim()
     for _ in range(3):
-        s.idle(3.0).smile()
+        s.events += s.c.simulate("fail", s.t)
     assert s.c.status == "alarm"
-    assert s.events.count("failed") == 3 and s.events[-1] == "alarm"
+    assert s.events == ["failed", "failed", "failed", "alarm"]
+
+
+def test_simulated_sequence_completes_and_ignores_wrong_order():
+    c = RiverwalkChallenge()
+    t = 0.0
+    assert c.simulate("nod", t) == [] and c.step == 0  # auto-starts, nod before face ignored
+    c.simulate("face", t)
+    c.simulate("smile", t)  # ignored
+    c.simulate("nod", t)
+    c.simulate("blink", t)
+    assert c.blinks == 1 and STEP(c) == "blink"
+    c.simulate("blink", t)
+    assert STEP(c) == "smile"
+    assert c.simulate("smile", t) == ["complete"]
+    assert c.failures == 0
+
+
+def test_simulated_fail_resets_progress():
+    c = RiverwalkChallenge()
+    for a in ("face", "nod", "blink"):
+        c.simulate(a, 0.0)
+    assert c.simulate("fail", 0.0) == ["failed"]
+    assert STEP(c) == "face" and c.blinks == 0 and c.failures == 1
 
 
 def test_losing_face_pauses_without_failure_and_freezes_timer():
@@ -105,7 +125,7 @@ def test_single_slow_blinks_dont_count_as_double():
 def test_restart_after_alarm_clears_failures():
     s = Sim()
     for _ in range(3):
-        s.idle(3.0).smile()
+        s.c.simulate("fail", s.t)
     s.c.start(s.t)
     assert s.c.status == "active" and s.c.failures == 0
 
@@ -142,4 +162,34 @@ def test_socket_flow_end_to_end():
     assert res == {"ok": True, "tagId": "TAG01", "amount": 5000, "loot": 5000}
     res = client.emit("nfc_scan", {"payload": "LOOTRUN|RIVERWALK|TAG01|5000"}, callback=True)
     assert res["ok"] is False and "already" in res["error"]
+    client.disconnect()
+
+
+def test_completion_awards_cash_and_wanted_level():
+    client = server.socketio.test_client(server.app)
+    client.emit("join_car", {"carId": "car-reward"}, callback=True)
+    snap = None
+    for action in ("face", "smile", "nod", "blink", "blink", "smile"):
+        snap = client.emit("simulate", {"action": action}, callback=True)
+    assert snap["status"] == "complete"
+    car = server.get_car("car-reward")
+    assert (car.loot, car.wanted_level, car.riverwalk_cleared) == (server.RIVERWALK_REWARD, 1, True)
+    assert server.RIVERWALK_REWARD == 5000
+
+    # Replaying a cleared vault pays nothing more; dev reset re-locks it.
+    for action in ("face", "nod", "blink", "blink", "smile"):
+        client.emit("simulate", {"action": action}, callback=True)
+    assert (car.loot, car.wanted_level) == (5000, 1)
+    assert client.emit("dev_reset_car", callback=True) == {"ok": True}
+    assert server.get_car("car-reward").loot == 0
+    client.disconnect()
+
+
+def test_alarm_raises_wanted_level_via_socket():
+    client = server.socketio.test_client(server.app)
+    client.emit("join_car", {"carId": "car-alarm"}, callback=True)
+    for _ in range(3):
+        client.emit("simulate", {"action": "fail"}, callback=True)
+    assert server.get_car("car-alarm").wanted_level == 1
+    assert any(m["name"] == "alarm" for m in client.get_received())
     client.disconnect()
