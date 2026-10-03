@@ -54,6 +54,10 @@
 .rw-heat { color: #ff8095; }
 .rw-face-pill { position: absolute; top: 12px; left: 12px; padding: 4px 10px; border-radius: 999px; font-size: 11px; font-weight: 700; letter-spacing: 1px; background: var(--h-danger); }
 .rw-face-pill.ok { background: var(--h-accent); color: #002a26; }
+.rw-sensor { position: absolute; left: 12px; right: 12px; bottom: 12px; padding: 6px 10px; border-radius: 8px; background: #050a12cc; color: var(--h-muted); font-size: 12px; text-align: center; }
+.rw-sensor.ok { color: var(--h-accent); }
+.rw-sensor.warn { color: var(--h-warn); }
+.rw-sensor.err { color: #ff8095; }
 .rw-timer { position: absolute; top: 0; left: 0; right: 0; height: 4px; background: #ffffff1a; }
 .rw-timer div { height: 100%; background: var(--h-warn); transition: width .2s linear; }
 

@@ -20,10 +20,24 @@ const DEV_ACTIONS = [
   ['smile', 'Simulate Smile'],
   ['fail', 'Simulate Fail'],
 ];
-const FPS = 15;
-const MAX_IN_FLIGHT = 2; // frames awaiting a server ack; extra frames are skipped, not queued
-const CAPTURE_W = 320;
-const CAPTURE_H = 240;
+// Presage needs a sustained ~25-30 fps stream with the face reasonably large.
+const FPS = 30;
+const MAX_IN_FLIGHT = 6; // frames awaiting a server ack; extra frames are skipped, not queued
+const CAPTURE_W = 480;
+const CAPTURE_H = 360;
+
+// What the Presage scanner is doing, for the strip under the camera.
+function sensorLine(ch) {
+  if (!ch) return null;
+  switch (ch.sensor) {
+    case 'starting': return { text: 'Connecting to Presage scanner...' };
+    case 'running': return ch.hint ? { text: ch.hint, warn: true } : { text: 'Presage scanner active', ok: true };
+    case 'busy': return { text: 'Another crew is at the checkpoint - hang tight.', warn: true };
+    case 'error':
+    case 'no_key': return { text: ch.sensorError || 'Presage scanner unavailable.', err: true };
+    default: return null;
+  }
+}
 
 const money = (n) => `$${(n || 0).toLocaleString()}`;
 
@@ -83,14 +97,15 @@ function useFramePump(active, videoRef, canvasRef) {
       const video = videoRef.current;
       if (!video || video.readyState < 2 || inFlight >= MAX_IN_FLIGHT) return;
       ctx.drawImage(video, 0, 0, CAPTURE_W, CAPTURE_H);
+      const capturedAt = performance.now();
       inFlight += 1;
       canvasRef.current.toBlob(async (blob) => {
         if (!blob || stopped) {
           inFlight -= 1;
           return;
         }
-        sendFrame(await blob.arrayBuffer(), () => { inFlight -= 1; });
-      }, 'image/jpeg', 0.7);
+        sendFrame(await blob.arrayBuffer(), capturedAt, () => { inFlight -= 1; });
+      }, 'image/jpeg', 0.75);
     }, 1000 / FPS);
     return () => {
       stopped = true;
@@ -111,6 +126,7 @@ export default function RiverwalkChallenge({ videoRef: sharedVideoRef }) {
   const status = ch?.status ?? (heist.riverwalkCleared ? 'complete' : 'idle');
   const running = status === 'active' || status === 'paused';
   useFramePump(camera.state === 'on' && running, videoRef, canvasRef);
+  const sensor = sensorLine(ch);
 
   useEffect(() => {
     closeRef.current?.focus();
@@ -153,6 +169,7 @@ export default function RiverwalkChallenge({ videoRef: sharedVideoRef }) {
             {camera.state === 'on' && running && (
               <>
                 <div className={`rw-face-pill ${ch?.faceVisible ? 'ok' : ''}`}>{ch?.faceVisible ? 'FACE LOCKED' : 'NO FACE'}</div>
+                {sensor && <div className={`rw-sensor ${sensor.ok ? 'ok' : sensor.err ? 'err' : sensor.warn ? 'warn' : ''}`} role="status">{sensor.text}</div>}
                 {ch?.timeLeft != null && (
                   <div className="rw-timer"><div style={{ width: `${Math.min(100, (ch.timeLeft / ch.stepTimeout) * 100)}%` }} /></div>
                 )}

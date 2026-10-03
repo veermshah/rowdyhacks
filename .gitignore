@@ -13,13 +13,6 @@ browser-pursuit.cjs
 .env.*
 !.env.example
 
-# Python (Riverwalk server)
-__pycache__/
-*.pyc
-server/.venv/
-server/models/
-server/.agents/
-server/skills-lock.json
 
 # OS / editor
 .DS_Store

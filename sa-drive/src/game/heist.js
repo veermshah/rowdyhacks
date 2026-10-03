@@ -79,6 +79,7 @@ export function openRiverwalk(reason) {
 
 export function closeRiverwalk() {
   set({ riverwalkOpen: false });
+  socket?.emit('leave_checkpoint'); // free the Presage scanner for other players
 }
 
 export function restartChallenge() {
@@ -96,10 +97,14 @@ export function resetHeistRun() {
   socket?.emit('reset_car');
 }
 
-/** Send one JPEG frame; calls done() when the server has answered (or timed out). */
-export function sendFrame(buf, done) {
+/**
+ * Send one JPEG frame to the Presage scanner. `capturedAt` is performance.now()
+ * at capture, so Presage sees the real spacing between frames. Calls done() when
+ * the server has answered (or timed out).
+ */
+export function sendFrame(buf, capturedAt, done) {
   if (!socket?.connected) return done();
-  socket.timeout(3000).emit('frame', buf, (err, snap) => {
+  socket.timeout(3000).emit('frame', { image: buf, t: capturedAt }, (err, snap) => {
     if (!err) applySnapshot(snap);
     done();
   });
