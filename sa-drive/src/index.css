@@ -1,0 +1,25 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body, #root {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: #000;
+  font-family: system-ui, -apple-system, sans-serif;
+}
+
+canvas {
+  display: block;
+}
+
+.navigation{position:fixed;top:18px;left:50%;transform:translateX(-50%);width:300px;text-align:center;color:#e9faff;padding:14px 18px 12px;background:linear-gradient(160deg,#102333e8,#07101cc9);border:1px solid #76e9f344;border-radius:18px;box-shadow:0 12px 40px #0006;z-index:20;backdrop-filter:blur(12px)}
+.nav-eyebrow{font-size:9px;letter-spacing:2.4px;color:#8aa9bd}.nav-arrow{width:62px;height:62px;color:#74f6ef;filter:drop-shadow(0 0 9px #41cdeaaa);margin:6px auto;display:block;will-change:transform}.nav-name{font-size:14px;font-weight:750;letter-spacing:1.4px;text-transform:uppercase}.nav-distance{font-size:22px;margin-top:4px;font-variant-numeric:tabular-nums}.nav-caption{font-size:8px;letter-spacing:1.5px;color:#91aebc}.nav-options{display:flex;gap:5px;margin-top:12px}.nav-options button{flex:1;padding:7px 3px;border:1px solid #54748255;border-radius:6px;background:#162b3c;color:#a9c5d5;font-size:10px;cursor:pointer}.nav-options button[aria-pressed=true]{background:#255660;color:#bafff8;border-color:#71e8e7}.arrival{position:absolute;top:calc(100% + 12px);left:0;right:0;padding:14px;background:#0c403eea;border:1px solid #76e9bf;border-radius:12px;color:#b9ffe8;font-size:14px}.nav-options button:focus-visible{outline:2px solid white}@media(max-height:650px){.navigation{top:8px;padding:8px 12px}.nav-arrow{height:40px;margin:2px auto}.nav-eyebrow,.nav-caption{display:none}}
+
+.arrow-perspective{perspective:250px;transform:rotateX(16deg)}.nav-arrow{width:68px;height:68px;filter:drop-shadow(0 5px 1px #042332) drop-shadow(0 0 9px #41cdeaaa)}
+.pursuit-status{position:fixed;right:22px;top:24px;z-index:21;background:#101e30de;border:1px solid #6586a34d;border-radius:10px;padding:12px 16px;color:#b7cbdc;font-size:11px;letter-spacing:1px;display:flex;align-items:center;gap:10px}.pursuit-status strong{color:white;font-variant-numeric:tabular-nums}.police-dot{width:12px;height:8px;border-radius:3px;background:linear-gradient(90deg,#ff456a 50%,#4cafff 50%);box-shadow:0 0 10px #7b60ca}.reverse-badge{color:#ffe3a3;border-left:1px solid #577083;padding-left:10px}.drive-hint{position:fixed;bottom:52px;left:50%;transform:translateX(-50%);color:#9cb5c9;font-size:10px;background:#071523b8;padding:6px 10px;border-radius:6px;pointer-events:none}.caught-overlay{position:fixed;inset:0;z-index:90;background:#030b18bc;backdrop-filter:blur(9px);display:grid;place-items:center;color:#e8f4ff}.caught-card{text-align:center;padding:45px 65px;background:linear-gradient(150deg,#1a2a44,#101725);border:1px solid #536b8d;border-radius:24px;box-shadow:0 30px 100px #0008}.caught-card h1{font-size:64px;letter-spacing:8px;color:#ff667f;margin:18px 0}.caught-card p{margin:14px 0;color:#b9cedf}.caught-card button{margin-top:18px;padding:14px 30px;border:1px solid #7df3ed;background:#1c525e;border-radius:9px;color:white;font-size:15px;cursor:pointer}@media(max-width:750px){.pursuit-status{top:auto;bottom:90px;right:12px;padding:9px}.drive-hint{bottom:52px;left:auto;right:12px;transform:none;font-size:8px}.caught-card{padding:30px}.caught-card h1{font-size:44px}}
+
+.nav-caption{text-transform:uppercase}

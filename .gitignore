@@ -1,16 +1,25 @@
-# Python
+# Node / build
+node_modules/
+dist/
+.browser-check/
+.github-publish/
+browser-check.cjs
+browser-pursuit.cjs
+*.log
+.vercel/
+
+# Env files
+.env
+.env.*
+!.env.example
+
+# Python (Riverwalk server)
 __pycache__/
 *.pyc
 server/.venv/
-server/.env
 server/models/
 server/.agents/
 server/skills-lock.json
-
-# Node
-node_modules/
-client/dist/
-client/.env.local
 
 # OS / editor
 .DS_Store
