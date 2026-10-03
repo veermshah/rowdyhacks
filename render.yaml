@@ -2,7 +2,7 @@
 # Render dashboard -> New -> Blueprint -> pick this repo/branch.
 services:
   - type: web
-    name: lootrun-server
+    name: lootrun-presage
     runtime: docker
     rootDir: server
     dockerfilePath: ./Dockerfile
