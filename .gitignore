@@ -1,0 +1,10 @@
+node_modules/
+dist/
+.browser-check/
+.github-publish/
+browser-check.cjs
+browser-pursuit.cjs
+.env
+.env.*
+!.env.example
+*.log
