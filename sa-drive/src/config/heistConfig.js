@@ -7,8 +7,8 @@ const env = import.meta.env ?? {};
 // Flask-SocketIO Riverwalk server (see /server). Set VITE_HEIST_SERVER_URL on Vercel.
 export const HEIST_SERVER_URL = env.VITE_HEIST_SERVER_URL || 'http://localhost:5000';
 
-// Dev-only UI: force-open button, simulate buttons, reset. On in `npm run dev`;
-// opt in on a deployed build with VITE_HEIST_DEV_TOOLS=true.
+// Dev-only UI inside the popup (Simulate buttons, sensor readout). On in
+// `npm run dev`, off in production builds unless VITE_HEIST_DEV_TOOLS=true.
 export const HEIST_DEV_TOOLS = !!env.DEV || env.VITE_HEIST_DEV_TOOLS === 'true';
 
 // Riverwalk checkpoint: the challenge opens when the car gets within TRIGGER

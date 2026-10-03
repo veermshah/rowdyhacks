@@ -18,7 +18,7 @@ let state = {
   wantedLevel: 0,
   riverwalkCleared: false,
   riverwalkOpen: false,
-  openReason: null, // 'arrived' | 'dev'
+  openReason: null, // 'arrived'
   challenge: null,
   alarm: null,
   lastReward: null,
@@ -90,11 +90,10 @@ export function simulate(action) {
   socket?.emit('simulate', { action }, applySnapshot);
 }
 
-export function devResetCar() {
-  socket?.emit('dev_reset_car', () => {
-    set({ alarm: null, lastReward: null, challenge: null });
-    if (state.riverwalkOpen) socket?.emit('start_challenge', applySnapshot);
-  });
+/** New run (game restarted): close the popup and wipe this car's loot, wanted level and vault. */
+export function resetHeistRun() {
+  set({ riverwalkOpen: false, alarm: null, lastReward: null, challenge: null, cash: 0, wantedLevel: 0, riverwalkCleared: false });
+  socket?.emit('reset_car');
 }
 
 /** Send one JPEG frame; calls done() when the server has answered (or timed out). */
@@ -106,11 +105,3 @@ export function sendFrame(buf, done) {
   });
 }
 
-export function submitNfc(payload) {
-  return new Promise((resolve) => {
-    if (!socket?.connected) return resolve({ ok: false, error: 'Heist server offline.' });
-    socket.timeout(5000).emit('nfc_scan', { payload }, (err, res) =>
-      resolve(err ? { ok: false, error: 'Server did not respond.' } : res)
-    );
-  });
-}

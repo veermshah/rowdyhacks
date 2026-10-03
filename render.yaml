@@ -1,0 +1,23 @@
+# Render Blueprint for the Riverwalk heist server (Flask-SocketIO).
+# Render dashboard -> New -> Blueprint -> pick this repo/branch.
+services:
+  - type: web
+    name: lootrun-server
+    runtime: python
+    plan: free
+    rootDir: server
+    buildCommand: pip install -r requirements.txt && python download_assets.py
+    # One worker (game state is in memory); threads serve the Socket.IO connections.
+    startCommand: gunicorn -w 1 --threads 50 -b 0.0.0.0:$PORT app:app
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.7
+      # Your friend's Vercel URL(s), comma-separated, no trailing slash.
+      - key: CORS_ORIGINS
+        sync: false
+      # 0 = dev Simulate buttons disabled on the server.
+      - key: RIVERWALK_DEV_MODE
+        value: "0"
+      - key: PRESAGE_API_KEY
+        sync: false

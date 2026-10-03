@@ -1,9 +1,9 @@
 import { useEffect } from 'react';
 import { car } from '../car/state.js';
 import { game } from '../game/runtime.js';
-import { connectHeist, disconnectHeist, getHeist, openRiverwalk, useHeist } from '../game/heist.js';
+import { connectHeist, disconnectHeist, getHeist, openRiverwalk, resetHeistRun, useHeist } from '../game/heist.js';
 import {
-  HEIST_DEV_TOOLS, MAX_WANTED_LEVEL, RIVERWALK_EXIT_RADIUS, RIVERWALK_POINT, RIVERWALK_TRIGGER_RADIUS,
+  MAX_WANTED_LEVEL, RIVERWALK_EXIT_RADIUS, RIVERWALK_POINT, RIVERWALK_TRIGGER_RADIUS,
 } from '../config/heistConfig.js';
 import RiverwalkChallenge from './RiverwalkChallenge.jsx';
 import './heist.css';
@@ -31,10 +31,19 @@ function HeistHud({ cash, wantedLevel, connected }) {
 
 // Opens the Riverwalk popup when the car drives up to the checkpoint. It fires
 // once per visit: the car must leave the exit radius before it can trigger again.
+// Also starts a fresh heist whenever the game restarts (R / "restart" after being
+// caught), so the vault can be robbed again on the next run.
 function useRiverwalkTrigger() {
   useEffect(() => {
     let inside = false;
+    let epoch = game.epoch;
     const id = setInterval(() => {
+      if (game.epoch !== epoch) {
+        // epoch 0 -> 1 is the initial map load, not a restart.
+        if (epoch > 0) resetHeistRun();
+        epoch = game.epoch;
+        inside = false;
+      }
       const d = Math.hypot(car.x - RIVERWALK_POINT.x, car.z - RIVERWALK_POINT.z);
       const wasInside = inside;
       inside = d < (inside ? RIVERWALK_EXIT_RADIUS : RIVERWALK_TRIGGER_RADIUS);
@@ -58,11 +67,6 @@ export default function HeistLayer({ videoRef }) {
   return (
     <>
       <HeistHud cash={heist.cash} wantedLevel={heist.wantedLevel} connected={heist.connected} />
-      {HEIST_DEV_TOOLS && !heist.riverwalkOpen && (
-        <button className="heist-dev-open" onClick={() => openRiverwalk('dev')}>
-          DEV: Force Open Riverwalk Challenge
-        </button>
-      )}
       {heist.riverwalkOpen && <RiverwalkChallenge videoRef={videoRef} />}
     </>
   );

@@ -8,17 +8,15 @@ height, blink score, smile score), and fed into a per-player state machine:
     face detected -> nod -> blink twice -> smile -> vault open ($)
 
 Run locally:   python app.py
-Run on Render: gunicorn -k eventlet -w 1 -b 0.0.0.0:$PORT app:app
+Run on Render: gunicorn -w 1 --threads 50 -b 0.0.0.0:$PORT app:app
 (one worker only: game state lives in memory)
 """
 import base64
-import hashlib
-import hmac
 import os
 import sys
 import threading
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 import cv2
 import numpy as np
@@ -68,10 +66,8 @@ SMILE_THRESHOLD = 0.6
 SMILE_FRAMES = 3
 
 MAX_FRAME_BYTES = 512 * 1024
-NFC_MAX_AMOUNT = 10_000
-NFC_SECRET = os.environ.get("NFC_SECRET", "")
 PRESAGE_API_KEY = os.environ.get("PRESAGE_API_KEY", "")
-# Enables the simulate / dev_reset_car socket events. Set RIVERWALK_DEV_MODE=0 in production.
+# Enables the dev `simulate` socket event. Set RIVERWALK_DEV_MODE=0 in production.
 DEV_MODE = os.environ.get("RIVERWALK_DEV_MODE", "1") != "0"
 
 STEPS = ["face", "nod", "blink", "smile"]
@@ -348,7 +344,6 @@ class RiverwalkChallenge:
         self.blinks += 1
         if self.blinks == 1:
             self.first_blink_at = now
-            self.message = "One more..."
         else:
             self._enter_step(3, now)
 
@@ -413,7 +408,6 @@ class RiverwalkChallenge:
             if self.first_blink_at is not None and now - self.first_blink_at > DOUBLE_BLINK_WINDOW_S:
                 self.blinks = 0
                 self.first_blink_at = None
-                self.message = "Too slow between signals - do both quickly."
             if blinked:
                 self._register_blink(now)
         elif step == "smile" and smiling:
@@ -475,44 +469,18 @@ class RiverwalkChallenge:
 
 
 # --------------------------------------------------------------------------- #
-# Shared car state (loot pool + wanted level) and NFC tags
+# Shared car state (loot pool + wanted level)
 # --------------------------------------------------------------------------- #
 @dataclass
 class CarState:
     loot: int = 0
     wanted_level: int = 0
     riverwalk_cleared: bool = False
-    claimed_tags: set = field(default_factory=set)
 
     def to_dict(self, car_id):
         return {"carId": car_id, "loot": self.loot, "wantedLevel": self.wanted_level,
                 "riverwalkCleared": self.riverwalk_cleared}
 
-
-def sign_nfc_payload(tag_id, amount):
-    msg = f"LOOTRUN|RIVERWALK|{tag_id}|{amount}".encode()
-    return hmac.new(NFC_SECRET.encode(), msg, hashlib.sha256).hexdigest()[:16]
-
-
-def parse_nfc_payload(raw):
-    """LOOTRUN|RIVERWALK|<tagId>|<amount>[|<sig>] -> (tag_id, amount). Raises ValueError."""
-    parts = str(raw or "").strip().split("|")
-    if len(parts) not in (4, 5) or parts[0] != "LOOTRUN" or parts[1] != "RIVERWALK":
-        raise ValueError("Not a Riverwalk loot tag.")
-    tag_id, amount_str = parts[2], parts[3]
-    if not tag_id.isalnum() or len(tag_id) > 32:
-        raise ValueError("Bad tag id.")
-    try:
-        amount = int(amount_str)
-    except ValueError:
-        raise ValueError("Bad amount.") from None
-    if not 0 < amount <= NFC_MAX_AMOUNT:
-        raise ValueError("Amount out of range.")
-    if NFC_SECRET:
-        sig = parts[4] if len(parts) == 5 else ""
-        if not hmac.compare_digest(sig, sign_nfc_payload(tag_id, amount)):
-            raise ValueError("Tag signature invalid - counterfeit loot!")
-    return tag_id, amount
 
 
 # --------------------------------------------------------------------------- #
@@ -701,11 +669,9 @@ def on_simulate(data):
     return snap
 
 
-@socketio.on("dev_reset_car")
-def on_dev_reset_car(*_):
-    """Dev: zero this car's loot/wanted level and re-lock the vault so it can be replayed."""
-    if not DEV_MODE:
-        return {"error": "dev mode disabled"}
+@socketio.on("reset_car")
+def on_reset_car(*_):
+    """New run (game restart): zero the car's loot/wanted level and re-lock the vault."""
     s = _session()
     with state_lock:
         cars[s.car_id] = CarState()
@@ -725,35 +691,7 @@ def on_reset(*_):
     return snap
 
 
-@socketio.on("nfc_scan")
-def on_nfc_scan(data):
-    s = _session()
-    car = get_car(s.car_id)
-    raw = data.get("payload") if isinstance(data, dict) else data
-    try:
-        tag_id, amount = parse_nfc_payload(raw)
-    except ValueError as e:
-        return {"ok": False, "error": str(e)}
-    with state_lock:
-        if not car.riverwalk_cleared:
-            return {"ok": False, "error": "Vault is still locked - finish the face check first."}
-        if tag_id in car.claimed_tags:
-            return {"ok": False, "error": "This loot was already claimed."}
-        car.claimed_tags.add(tag_id)
-        car.loot += amount
-    socketio.emit("reward", {"source": "nfc", "tagId": tag_id, "amount": amount, "loot": car.loot},
-                  to=f"car:{s.car_id}")
-    broadcast_car(s.car_id)
-    return {"ok": True, "tagId": tag_id, "amount": amount, "loot": car.loot}
-
-
 if __name__ == "__main__":
-    if len(sys.argv) >= 4 and sys.argv[1] == "make-tag":
-        # python app.py make-tag <tagId> <amount>  -> text to write onto an NFC tag
-        tag, amt = sys.argv[2], int(sys.argv[3])
-        payload = f"LOOTRUN|RIVERWALK|{tag}|{amt}"
-        print(payload + (f"|{sign_nfc_payload(tag, amt)}" if NFC_SECRET else ""))
-        sys.exit(0)
     port = int(os.environ.get("PORT", 5000))
     print(f"Riverwalk server on http://localhost:{port} (async={socketio.async_mode}, detector={detector_name()})")
     socketio.run(app, host="0.0.0.0", port=port, debug=False, allow_unsafe_werkzeug=True)

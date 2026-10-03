@@ -38,8 +38,6 @@ ASSETS = {
 ENV_TEMPLATE = """\
 # Presage SmartSpectra (https://smartspectra.presagetech.com) - optional
 PRESAGE_API_KEY=
-# Shared secret used to sign NFC loot tags (leave blank to accept unsigned tags)
-NFC_SECRET=
 # Comma-separated allowed origins for the React client
 CORS_ORIGINS=http://localhost:5173
 """

@@ -130,18 +130,6 @@ def test_restart_after_alarm_clears_failures():
     assert s.c.status == "active" and s.c.failures == 0
 
 
-def test_nfc_payload_parsing(monkeypatch):
-    assert server.parse_nfc_payload("LOOTRUN|RIVERWALK|TAG01|5000") == ("TAG01", 5000)
-    for bad in ["hello", "LOOTRUN|ALAMO|T|5", "LOOTRUN|RIVERWALK|T|-5", "LOOTRUN|RIVERWALK|T|999999"]:
-        with pytest.raises(ValueError):
-            server.parse_nfc_payload(bad)
-    monkeypatch.setattr(server, "NFC_SECRET", "s3cret")
-    sig = server.sign_nfc_payload("TAG01", 5000)
-    assert server.parse_nfc_payload(f"LOOTRUN|RIVERWALK|TAG01|5000|{sig}") == ("TAG01", 5000)
-    with pytest.raises(ValueError):
-        server.parse_nfc_payload("LOOTRUN|RIVERWALK|TAG01|5000|deadbeefdeadbeef")
-
-
 def test_socket_flow_end_to_end():
     """Real Socket.IO round trip with a blank frame (no face) through the real detector."""
     client = server.socketio.test_client(server.app)
@@ -154,14 +142,6 @@ def test_socket_flow_end_to_end():
 
     assert client.emit("frame", b"not a jpeg", callback=True) == {"error": "bad frame"}
 
-    res = client.emit("nfc_scan", {"payload": "LOOTRUN|RIVERWALK|TAG01|5000"}, callback=True)
-    assert res["ok"] is False and "locked" in res["error"]
-
-    server.get_car("car42").riverwalk_cleared = True
-    res = client.emit("nfc_scan", {"payload": "LOOTRUN|RIVERWALK|TAG01|5000"}, callback=True)
-    assert res == {"ok": True, "tagId": "TAG01", "amount": 5000, "loot": 5000}
-    res = client.emit("nfc_scan", {"payload": "LOOTRUN|RIVERWALK|TAG01|5000"}, callback=True)
-    assert res["ok"] is False and "already" in res["error"]
     client.disconnect()
 
 
@@ -176,11 +156,11 @@ def test_completion_awards_cash_and_wanted_level():
     assert (car.loot, car.wanted_level, car.riverwalk_cleared) == (server.RIVERWALK_REWARD, 1, True)
     assert server.RIVERWALK_REWARD == 5000
 
-    # Replaying a cleared vault pays nothing more; dev reset re-locks it.
+    # Replaying a cleared vault pays nothing more; a game restart (reset_car) re-locks it.
     for action in ("face", "nod", "blink", "blink", "smile"):
         client.emit("simulate", {"action": action}, callback=True)
     assert (car.loot, car.wanted_level) == (5000, 1)
-    assert client.emit("dev_reset_car", callback=True) == {"ok": True}
+    assert client.emit("reset_car", callback=True) == {"ok": True}
     assert server.get_car("car-reward").loot == 0
     client.disconnect()
 
