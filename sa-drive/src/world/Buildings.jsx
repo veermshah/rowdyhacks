@@ -2,7 +2,7 @@ import { useMemo, useEffect } from 'react';
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { fromOsmId } from '../lib/seededRandom.js';
-const palette=['#354450','#475366','#645b60','#586575','#4b6265','#77665c'];
+const palette=['#354450','#475366','#645b60','#586575','#4b6265','#77665c','#897d69','#686953','#604d45','#687477'];
 function colored(g,color){const c=new THREE.Color(color),a=new Float32Array(g.attributes.position.count*3);for(let i=0;i<a.length;i+=3){a[i]=c.r;a[i+1]=c.g;a[i+2]=c.b;}g.setAttribute('color',new THREE.BufferAttribute(a,3));return g;}
 function box(w,h,d,x,y,z,color,angle=0){const g=new THREE.BoxGeometry(w,h,d).toNonIndexed();g.rotateY(angle);g.translate(x,y,z);return colored(g,color);}
 function merge(items){if(!items.length)return null;const g=mergeGeometries(items,false);items.forEach(a=>a.dispose());return g;}
@@ -21,21 +21,28 @@ export default function Buildings({buildings}){
         const cx=pts.reduce((v,p)=>v+p.x,0)/pts.length,cz=pts.reduce((v,p)=>v+p.z,0)/pts.length;
         const roof=new THREE.ExtrudeGeometry(shape,{depth:2,bevelEnabled:false});roof.rotateX(-Math.PI/2);roof.translate(-cx,0,-cz);roof.scale(.86,1,.86);roof.translate(cx,height,cz);bodies.push(colored(roof,'#334553'));
       }
-      const glow=rng()>.7?'#70e4ef':'#ffd39a';
+      const style=Math.floor(rng()*3),spacing=[2.5,3.3,4.1][style],floorHeight=3.25+rng()*.4;
+      const glow=['#f0cd98','#a1c8c5','#e2d9b3'][style];
+      if(height>12){
+        const cx=pts.reduce((v,p)=>v+p.x,0)/pts.length,cz=pts.reduce((v,p)=>v+p.z,0)/pts.length;
+        const cap=new THREE.ExtrudeGeometry(shape,{depth:1.5+rng()*3,bevelEnabled:false});cap.rotateX(-Math.PI/2);cap.translate(-cx,0,-cz);cap.scale(.5+style*.1,1,.5+style*.1);cap.translate(cx,height+(height>25?2:0),cz);bodies.push(colored(cap,'#34454c'));
+      }
       for(let i=0;i<pts.length;i++){
         const a=pts[i],b=pts[(i+1)%pts.length],dx=b.x-a.x,dz=b.z-a.z,len=Math.hypot(dx,dz);if(len<1)continue;
         const angle=-Math.atan2(dz,dx),mx=(a.x+b.x)/2,mz=(a.z+b.z)/2;
         details.push(box(len,.5,.45,mx,height,mz,'#7b8895',angle));
         if(height>22)lights.push(box(len,.12,.5,mx,height-.5,mz,glow,angle));
+        if(style===1&&len>6)for(let d=2;d<len-1;d+=6)details.push(box(.23,height-min,.35,a.x+dx*d/len,min+(height-min)/2,a.z+dz*d/len,'#79847f',angle));
+        if(style===2)for(let y=min+4;y<height;y+=7)details.push(box(len,.22,.35,mx,y,mz,'#899189',angle));
         // Thin boxes straddle the wall: both footprint windings remain valid.
-        const floors=Math.min(16,Math.floor((height-min-3)/3.5));
-        for(let floor=0;floor<floors;floor++)for(let d=2;d<len-2;d+=4){
-          if(rng()<.42)continue;
-          const window=new THREE.PlaneGeometry(1.2,1.35).toNonIndexed();
-          window.rotateY(angle);window.translate(a.x+dx*d/len+dz/len*.08,min+3+floor*3.5,a.z+dz*d/len-dx/len*.08);
+        const floors=Math.min(30,Math.floor((height-min-2)/floorHeight));
+        for(let floor=0;floor<floors;floor++)for(let d=1.7;d<len-1.2;d+=spacing){
+          const lit=rng()>.28,color=lit?glow:'#203a46';
+          const window=new THREE.PlaneGeometry([1.3,1.65,2.2][style],[1.65,1.9,1.4][style]).toNonIndexed();
+          window.rotateY(angle);window.translate(a.x+dx*d/len+dz/len*.1,min+2.4+floor*floorHeight,a.z+dz*d/len-dx/len*.1);
           // Plane on each face avoids depending on OSM winding.
-          const back=window.clone();back.translate(-dz/len*.16,0,dx/len*.16);
-          lights.push(colored(window,glow),colored(back,glow));
+          const back=window.clone();back.translate(-dz/len*.2,0,dx/len*.2);
+          lights.push(colored(window,color),colored(back,color));
         }
       }
     }

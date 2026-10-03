@@ -4,6 +4,7 @@ import Car from './car/Car.jsx';
 import { car, setRoadGrid, setBuildingGrid } from './car/state.js';
 import CameraRig from './car/CameraRig.jsx';
 import Ground from './world/Ground.jsx';
+import RouteBranding from './world/Branding.jsx';
 import Roads from './world/Roads.jsx';
 import Buildings from './world/Buildings.jsx';
 import River from './world/River.jsx';
@@ -128,6 +129,7 @@ export default function App() {
           <>
             <Roads roads={mapData.roads} river={mapData.river} />
             <Buildings buildings={mapData.buildings} />
+            <RouteBranding buildings={mapData.buildings} />
             <River network={mapData.river} roads={mapData.roads} buildings={mapData.buildings} />
             <Trees roads={mapData.roads} buildings={mapData.collisionObstacles} bounds={treeBounds} />
             <StreetProps roads={mapData.roads} buildings={mapData.collisionObstacles} />

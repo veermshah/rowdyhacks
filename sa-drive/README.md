@@ -29,7 +29,7 @@ If you are developing a production application, we recommend using TypeScript wi
 Gear changes brake through zero; reverse is capped at 30% of the current speed
 limit. Hand-mode forward throttle reaches normal cruising speed for pursuit.
 The police cruiser starts approximately 185 road meters behind the player after a four-second grace period, follows A* waypoints,
-replans every 1.05-1.45 seconds, and stops the game on physical vehicle contact.
+replans every 0.45-0.75 seconds, and stops the game on physical vehicle contact.
 Building collision stays active in both gears and for the police. A clear final
 approach within the road boundary lets police catch cars stopped on the shoulder.
 
@@ -51,6 +51,7 @@ Validation:
 node scripts/validate-driving.mjs
 node scripts/validate-gameplay.mjs
 node scripts/validate-rear-pursuit.mjs
+node scripts/validate-polish.mjs
 npm run lint
 npm run build
 ```
@@ -83,15 +84,35 @@ Both hands can remain tracked for wheel steering. A glance holds the current
 forward/reverse gear; it does not change steering or throttle. Tracking loss
 releases the camera, and restart clears the gesture.
 
-Police tuning is centralized in src/config/policeConfig.js: 80% cruising speed,
-95% against a slow/stopped player, 4 m/s2 acceleration, delayed route updates,
-75% moderate-turn speed and 58% sharp-turn speed. Sharp turns also introduce a
-short hesitation with bounded yaw speed. No rubber-banding boost is used.
+Police tuning is centralized in src/config/policeConfig.js: 94% cruising speed,
+107% temporary boost against a slow/stopped player, 5.5 m/s2 acceleration,
+88% moderate-turn speed and 74% sharp-turn speed. Sharp turns also introduce a
+short hesitation with bounded yaw speed. Boosts last four seconds with eight seconds of recovery; a distant cruiser may also boost, capped at 107%. Close-range catch-up ends when the player resumes speed.
 Valid initial pursuit distance is 170-220 m, normally 185 m, with four seconds
-of grace. The 0.5 difficulty label is a tuning target, not a measured catch rate.
+of grace. The 0.8 difficulty label is a tuning target, not a measured catch rate.
 
 The latest browser check verified smooth rear/forward transitions, a police
 car behind the camera's rear-facing direction, steering in reverse during a
 rear glance, caught state and restart; sampled 60 FPS and 45-50 draw calls.
 Automated gesture tests use synthetic landmarks; live webcam testing remains
 a manual check across lighting conditions and hand shapes.
+
+### Environment and branding polish
+Muted green ground uses a lightweight procedural color variation shader. Trees
+remain instanced; shrubs, planters, lamps and benches use merged meshes. Road
+rectangles maintain constant widths with small rounded outside joins instead of
+sample-spacing-dependent strip normals. Pedestrian paths have warm paving.
+Buildings have seeded facade styles, denser lit/dark windows, roof setbacks and
+cornices. Landmarks have selective merged detail, an Alamo plaza/fence with a
+walk-in gate, and river bridges trimmed to the channel with shallow arches.
+
+The supplied, unchanged WebP logo is in public/branding/rowdy-logo.webp. It is
+shared by roof/door badges and up to six spaced route-side facade signs. Sign
+selection runs only on route changes; both sign faces and frames are merged.
+No external model packs or large texture sets were introduced.
+
+The polish browser sample settled at 60 FPS / 53 draw calls after initialization;
+initial shader/geometry warm-up was below target. These are local desktop results,
+not a guarantee for mobile or webcam inference. Rear camera, reverse steering,
+catch and restart passed again. Synthetic gesture tests do not replace a live
+webcam check. Difficulty is a tuning target, not a measured player catch rate.

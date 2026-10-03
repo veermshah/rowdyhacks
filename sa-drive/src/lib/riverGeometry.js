@@ -29,23 +29,30 @@ export function buildRiverScene(network,roads,buildings){
   // Reuse OSM crossings: pedestrian bridges rise from the lower promenade;
   // road bridges keep the same flat drivable surface with arched stone spandrels.
   const used=new Set();
-  for(const road of roads){
+  for(const road of [...roads].sort((a,b)=>Number(b.drivable)-Number(a.drivable))){
     if(!road.bridge||road.type.startsWith('motorway'))continue;
-    const a=road.points[0],b=road.points.at(-1),len=Math.hypot(b.x-a.x,b.z-a.z),mx=(a.x+b.x)/2,mz=(a.z+b.z)/2;
+    let a=road.points[0],b=road.points.at(-1),len=Math.hypot(b.x-a.x,b.z-a.z),mx=(a.x+b.x)/2,mz=(a.z+b.z)/2;
     if(len<8||len>70||nearestRiver(network,mx,mz).distance>7)continue;
-    const key=`${Math.round(mx/12)},${Math.round(mz/12)}`;if(used.has(key))continue;used.add(key);
-    const dx=(b.x-a.x)/len,dz=(b.z-a.z)/len,width=road.drivable?road.width:3.0,steps=16;
-    const at=(t,side=0,up=0)=>({x:a.x+(b.x-a.x)*t-dz*side,y:(road.drivable?-.08:WALKWAY_Y+2.3*Math.sin(Math.PI*t))+up,z:a.z+(b.z-a.z)*t+dx*side});
+    const key=`${Math.round(mx/18)},${Math.round(mz/18)}`;if(used.has(key)||bridges.some(p=>Math.hypot(p.x-mx,p.z-mz)<16))continue;used.add(key);
+    {const river=nearestRiver(network,mx,mz),vx=(b.x-a.x)/len,vz=(b.z-a.z)/len;len=Math.min(28,CHANNEL_HALF*2/Math.max(.65,Math.abs(vx*(-river.dz)+vz*river.dx)));mx=river.x;mz=river.z;a={x:mx-vx*len/2,z:mz-vz*len/2};b={x:mx+vx*len/2,z:mz+vz*len/2};}
+    const dx=(b.x-a.x)/len,dz=(b.z-a.z)/len,width=road.drivable?road.width:3.2,steps=24;
+    const at=(t,side=0,up=0)=>({x:a.x+(b.x-a.x)*t-dz*side,y:(road.drivable?-.08:WALKWAY_Y+1.1*4*t*(1-t))+up,z:a.z+(b.z-a.z)*t+dx*side});
     if(!road.drivable)for(let i=0;i<steps;i++)beam(at(i/steps),at((i+1)/steps),width,.38,'#b1a082');
     for(const side of [-1,1]){
       const edge=side*(width/2+.12);
       for(let i=0;i<steps;i++){
         beam(at(i/steps,edge,.9),at((i+1)/steps,edge,.9),.17,.2,'#cbbb99');
-        if(i%2===0){const p=at(i/steps,edge,.45);box(p.x,p.y,p.z,.17,.85,.17,'#ac9879');}
+        if(i%2===0){const p=at(i/steps,edge,.45);box(p.x,p.y,p.z,.1,.85,.1,'#47564d');}
+        beam(at(i/steps,edge,.2),at((i+1)/steps,edge,.2),.12,.13,'#626956');
+        // Continuous pale arch fascia and radial stone joints.
+        const p=at(i/steps,edge,-.2),q=at((i+1)/steps,edge,-.2);
+        beam(p,q,.32,.42,i%3?'#bfae8e':'#cebd9b');
       }
+      for(const t of [0,1]){const p=at(t,edge,.5);box(p.x,p.y,p.z,.65,1.1,.65,'#c7b594');box(p.x,p.y+.62,p.z,.8,.14,.8,'#decbab');add(new THREE.SphereGeometry(.16,8,6).translate(p.x,p.y+.85,p.z),'#ffe2af',lights);}
       if(road.drivable){
         const shape=new THREE.Shape();shape.moveTo(-len/2,-.05);shape.lineTo(len/2,-.05);shape.lineTo(len/2,-3.4);shape.quadraticCurveTo(0,2,-len/2,-3.4);shape.closePath();
         const g=new THREE.ExtrudeGeometry(shape,{depth:.45,bevelEnabled:false,curveSegments:18});g.translate(0,0,-.225);g.rotateY(-Math.atan2(dz,dx));g.translate(mx-dz*edge,0,mz+dx*edge);add(g,'#aa9879');
+        for(let i=0;i<steps;i++){const p=at(i/steps,edge),q=at((i+1)/steps,edge);p.y=-3.4+2.7*4*(i/steps)*(1-i/steps);q.y=-3.4+2.7*4*((i+1)/steps)*(1-(i+1)/steps);beam(p,q,.53,.26,i%2?'#cbbb9b':'#d7c7aa');}
       }
     }
     bridges.push({x:mx,z:mz,length:len,drivable:!!road.drivable});
@@ -77,6 +84,9 @@ export function buildRiverScene(network,roads,buildings){
         add(new THREE.CylinderGeometry(.08,.1,.8,6).translate(px,-1.78,pz),'#4b5146');
         add(new THREE.ConeGeometry(1.65,.6,12).translate(px,.3,pz),'#9c6f51');
         add(new THREE.CylinderGeometry(.045,.045,2.3,6).translate(px,-.9,pz),'#75654e');
+        for(const side of [-1,1]){box(px+dx*side,-1.65,pz+dz*side,.48,.14,.48,'#8c7658');box(px+dx*side,-1.95,pz+dz*side,.1,.65,.1,'#48584d');}
+        add(new THREE.CylinderGeometry(.5,.4,.6,8).translate(px+dx*2.5,-1.85,pz+dz*2.5),'#9e8060');
+        add(new THREE.SphereGeometry(.6,8,5).translate(px+dx*2.5,-1.4,pz+dz*2.5),'#486e4c',foliage);
         const left={x:px-dx*4,y:.75,z:pz-dz*4},right={x:px+dx*4,y:.75,z:pz+dz*4};
         beam(left,right,.025,.025,'#3e4e47');
         for(let j=0;j<7;j++)add(new THREE.SphereGeometry(.085,6,4).translate(left.x+dx*j*1.33,.7-Math.sin(j/6*Math.PI)*.35,left.z+dz*j*1.33),'#ffdfa0',lights);

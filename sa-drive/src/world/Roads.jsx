@@ -4,10 +4,11 @@ import * as THREE from 'three';
 import { buildRibbon, mergeRibbons } from '../lib/ribbon.js';
 export default function Roads({roads,river}) {
   const meshes=useMemo(()=>{
-    const groups=[[],[],[],[]];
+    const groups=[[],[],[],[],[]];
     for(const r of roads){
       if(r.tunnel) continue;
       if(!r.drivable&&r.points.some(p=>nearestRiver(river,p.x,p.z).distance<CHANNEL_HALF+1))continue;
+      if(!r.drivable){groups[4].push(buildRibbon(r.points,r.width,.04));continue;}
       // The driving simulation is a ground-plane arcade world; bridge road
       // decks share that plane so rendered and drivable surfaces agree.
       const curb=buildRibbon(r.points,r.width+2.8,.035),edge=buildRibbon(r.points,r.width+.35,.05),surface=buildRibbon(r.points,r.width,.065);
@@ -24,7 +25,7 @@ export default function Roads({roads,river}) {
     }
     return groups.map((r,i)=>{
       const m=mergeRibbons(r),g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.BufferAttribute(m.positions,3));g.setIndex(m.indices);g.computeVertexNormals();
-      return {g,color:['#485762','#7db8ba','#15232e','#c3b188'][i]};
+      return {g,color:['#596266','#809493','#17272d','#c3b188','#7c8072'][i]};
     });
   },[roads,river]);
   useEffect(()=>()=>meshes.forEach(m=>m.g.dispose()),[meshes]);

@@ -27,7 +27,8 @@ export const LANDMARKS = {
 
 // Replace the exported tower podium with its dedicated low-rise model.
 export const LANDMARK_OSM_REPLACEMENTS = new Set([78485919,92060042]);
+export const ALAMO_FENCE=[[-14,-27,14,-27],[-14,-27,-14,13],[14,-27,14,13],[-14,13,-3,13],[3,13,14,13]];
 export function landmarkObstacles() {
   const shape=(key,points)=>{const cfg=LANDMARKS[key],c=toLocal(cfg.lat,cfg.lon),angle=cfg.headingDeg*Math.PI/180;return {points:points.map(([x,z])=>({x:c.x+x*Math.cos(angle)+z*Math.sin(angle),z:c.z-x*Math.sin(angle)+z*Math.cos(angle)}))};};
-  return [shape('alamo',[[-11.8,-25],[11.8,-25],[11.8,8.5],[-11.8,8.5]]),shape('towerOfAmericas',Array.from({length:24},(_,i)=>[Math.sin(i*Math.PI/12)*14.8,Math.cos(i*Math.PI/12)*14.8]))];
+  return [shape('alamo',[[-11.8,-25],[11.8,-25],[11.8,8.5],[-11.8,8.5]]),...ALAMO_FENCE.map(([x,z,bx,bz])=>shape('alamo',[[Math.min(x,bx)-.2,Math.min(z,bz)-.2],[Math.max(x,bx)+.2,Math.min(z,bz)-.2],[Math.max(x,bx)+.2,Math.max(z,bz)+.2],[Math.min(x,bx)-.2,Math.max(z,bz)+.2]])),shape('towerOfAmericas',Array.from({length:24},(_,i)=>[Math.sin(i*Math.PI/12)*14.8,Math.cos(i*Math.PI/12)*14.8]))];
 }

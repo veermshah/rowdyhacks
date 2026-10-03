@@ -4,7 +4,7 @@ import { useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { seededRandom } from '../lib/seededRandom.js';
 
-const TREE_COUNT = 800;
+const TREE_COUNT = 1050;
 
 // Tree colors (live oak, cypress, palm)
 const FOLIAGE_COLORS = [

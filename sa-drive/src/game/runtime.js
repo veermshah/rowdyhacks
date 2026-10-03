@@ -1,7 +1,7 @@
 import { findFairStart } from '../lib/fairStart.js';
 import { PURSUIT_GRACE_SECONDS } from './startConfig.js';
 import { POLICE_CONFIG as PC } from '../config/policeConfig.js';
-import { policeTargetSpeed,angleDelta } from './policeDriving.js';
+import { policeTargetSpeed,angleDelta,updatePoliceBoost } from './policeDriving.js';
 import { car } from '../car/state.js';
 import { input } from '../input/input.js';
 import { destinations,navigation } from '../config/navigation.js';
@@ -70,12 +70,13 @@ export function stepPursuit(dt){
     if(!direct)cop.finalApproach=false;
     cop.lastPlan=elapsed;
     // Deterministic variation keeps replays/tests reproducible, without reacting
-    // instantly to every road choice. No position-based rubber banding.
+    // instantly to every road choice. Positions are never corrected or teleported.
     cop.replanDelay=PC.routeUpdateMin+(PC.routeUpdateMax-PC.routeUpdateMin)*((++cop.plans*.61803398875)%1);
     if(route && clearSegment(game.obstacles,cop,route.points[0])){cop.route=route;cop.index=0;}
   }
   if(!cop.route){cop.v=0;return;}
   const gap=Math.hypot(car.x-cop.x,car.z-cop.z);
+  updatePoliceBoost(cop,car,gap,dt);
   const targetSpeed=policeTargetSpeed(cop,car);
   cop.v+=Math.max(-PC.braking*dt,Math.min(PC.acceleration*dt,targetSpeed-cop.v));
   let yawBudget=PC.yawRate*dt;

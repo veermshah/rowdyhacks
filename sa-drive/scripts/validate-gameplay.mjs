@@ -12,6 +12,7 @@ import { buildRiverNetwork,riverObstacles } from '../src/lib/riverNetwork.js';
 import { buildRouteRibbon } from '../src/lib/routeRibbon.js';
 import { buildRoadGraph,calculateRoute,routeProgress,clearSegment,nearestEdge } from '../src/lib/roadGraph.js';
 import { game,guidance,initializeGame,restartGame,tickGame,vehiclesTouch } from '../src/game/runtime.js';
+import { POLICE_CONFIG } from '../src/config/policeConfig.js';
 import { car } from '../src/car/state.js';
 import { findFairStart } from '../src/lib/fairStart.js';
 import { buildRiverScene } from '../src/lib/riverGeometry.js';
@@ -58,8 +59,8 @@ for(let i=0;i<3600&&!game.caught&&waypoint<chasePath.length;i++){
   if(length<.001){waypoint++;continue;}
   car.x+=dx/length*step;car.z+=dz/length*step;car.yaw=Math.atan2(dx,dz);car.v=20;
   const old={x:game.police.x,z:game.police.z,yaw:game.police.yaw};tickGame(1/60);const moved=Math.hypot(game.police.x-old.x,game.police.z-old.z);policeTravel+=moved;
-  assert(moved<=25/60+.001,'bounded pursuit movement without teleporting');
-  assert(Math.abs(Math.atan2(Math.sin(game.police.yaw-old.yaw),Math.cos(game.police.yaw-old.yaw)))<=2.5/60+.001,'bounded police rotation');
+  assert(moved<=25*1.1/60+.001,'bounded pursuit movement without teleporting');
+  assert(Math.abs(Math.atan2(Math.sin(game.police.yaw-old.yaw),Math.cos(game.police.yaw-old.yaw)))<=POLICE_CONFIG.yawRate/60+.001,'bounded police rotation');
   const policeRoad=nearestEdge(graph,game.police);assert(policeRoad.distance<=policeRoad.edge.width/2-.89,'police remains inside road');
   assert(!overlapsBuilding(obstacles,game.police.x,game.police.z),'moving pursuit never enters buildings');
   if(step>=length-.001)waypoint++;

@@ -7,6 +7,7 @@ import { moveWithCollision } from '../lib/collision.js';
 import { stepCar } from './physics.js';
 import { input } from '../input/input.js';
 import { queryNearestRoad } from '../lib/grid.js';
+import { CarBranding } from '../world/Branding.jsx';
 
 export default function Car() {
   const groupRef = useRef();
@@ -57,6 +58,7 @@ export default function Car() {
 
   return (
     <group ref={groupRef}>
+      <CarBranding />
       {/* Car body */}
       <RoundedBox position={[0, 0.55, 0]} args={[1.8, 0.5, 4.2]} radius={.16} smoothness={2} castShadow>
         <meshStandardMaterial color={bodyColor} metalness={0.55} roughness={0.3} />
