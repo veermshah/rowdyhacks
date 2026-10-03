@@ -8,3 +8,4 @@ browser-pursuit.cjs
 .env.*
 !.env.example
 *.log
+.vercel/

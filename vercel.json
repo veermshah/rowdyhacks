@@ -1,0 +1,7 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": null,
+  "installCommand": "npm --prefix sa-drive ci",
+  "buildCommand": "npm --prefix sa-drive run build",
+  "outputDirectory": "sa-drive/dist"
+}
