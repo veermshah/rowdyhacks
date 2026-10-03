@@ -85,15 +85,34 @@ export function calculateRoute(graph,start,target,blocked=new Set(),targetFilter
   if(s.edge.id===t.edge.id && ((t.t>=s.t&&s.edge.forward)||(t.t<=s.t&&s.edge.backward))&&!blocked.has(s.edge.id))accept([{x:s.x,z:s.z,width:s.edge.width},{x:t.x,z:t.z,width:t.edge.width}],Math.abs(t.t-s.t)*s.edge.distance,[s.edge.id]);
   const starts=[...(s.edge.backward?[s.edge.start]:[]),...(s.edge.forward?[s.edge.end]:[])];
   const ends=[...(t.edge.forward?[t.edge.start]:[]),...(t.edge.backward?[t.edge.end]:[])];
-  for(const from of starts)for(const to of ends){
-    const path=aStar(graph,from,to,blocked);if(!path)continue;
+  // A virtual source/target combines the two legal entry and exit nodes in
+  // one A* search. The old implementation repeated almost the same search
+  // four times per destination change, reroute, and police replan.
+  const open=new Heap(),cost=new Map(),previous=new Map(),goals=new Set(ends);
+  for(const id of starts){const g=distance(s,graph.nodes[id]);if(g<(cost.get(id)??Infinity)){cost.set(id,g);open.push({id,g,f:g+distance(graph.nodes[id],t)});}}
+  let winner=null,limit=best?.length??Infinity;
+  while(open.items.length){
+    const current=open.pop();if(current.g!==cost.get(current.id))continue;
+    if(current.f>=limit)break;
+    if(goals.has(current.id)){
+      const total=current.g+distance(graph.nodes[current.id],t);
+      if(total<limit){limit=total;winner=current.id;}
+    }
+    for(const e of graph.nodes[current.id].edges){
+      if(blocked.has(e.edge))continue;
+      const g=current.g+e.cost;
+      if(g<(cost.get(e.to)??Infinity)){cost.set(e.to,g);previous.set(e.to,{id:current.id,edge:e.edge});open.push({id:e.to,g,f:g+distance(graph.nodes[e.to],t)});}
+    }
+  }
+  if(winner!==null){
+    const path=[winner],pathEdges=[];
+    while(previous.has(path[0])){const p=previous.get(path[0]);path.unshift(p.id);pathEdges.unshift(p.edge);}
     const points=[{x:s.x,z:s.z,width:s.edge.width}],ids=[s.edge.id];
-    for(let i=0;i<path.ids.length;i++){
-      const n=graph.nodes[path.ids[i]],next=path.ids[i+1];const edge=next===undefined?t.edge:graph.edges[n.edges.find(e=>e.to===next).edge];
+    for(let i=0;i<path.length;i++){
+      const n=graph.nodes[path[i]],edge=i<pathEdges.length?graph.edges[pathEdges[i]]:t.edge;
       points.push({x:n.x,z:n.z,width:edge.width});ids.push(edge.id);
     }
-    points.push({x:t.x,z:t.z,width:t.edge.width});
-    accept(points,path.distance+distance(s,graph.nodes[from])+distance(t,graph.nodes[to]),ids);
+    points.push({x:t.x,z:t.z,width:t.edge.width});accept(points,limit,ids);
   }
   return best;
 }

@@ -116,3 +116,8 @@ initial shader/geometry warm-up was below target. These are local desktop result
 not a guarantee for mobile or webcam inference. Rear camera, reverse steering,
 catch and restart passed again. Synthetic gesture tests do not replace a live
 webcam check. Difficulty is a tuning target, not a measured player catch rate.
+
+### Performance correction
+See [PERFORMANCE.md](PERFORMANCE.md) for profiling, confirmed bottlenecks, measured
+results and verification limits. Run `node scripts/validate-performance.mjs`
+alongside the existing validation scripts. Gameplay and artwork are preserved.
