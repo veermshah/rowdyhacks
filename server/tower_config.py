@@ -74,7 +74,7 @@ BRIEFING = (
     "you're the account holder - or find the staff override phrase. "
     "She'll send a one-time code to the device on file: the vault's screen. "
     "Read it off, then key it in on the joystick (up/down = digit, "
-    "left/right = position, press = submit) before it expires."
+    "left/right = position; right on the last digit submits) before it expires."
 )
 
 # --- Vault LCD status lines (<=16 chars each; {..} filled at runtime) ---------
@@ -84,6 +84,8 @@ LCD_STATUS = {
     "verify": ("VERIFYING...", "STAY ON LINE"),
     "code": ("CODE:", "{code}"),
     "entering": ("ENTER CODE {secs:>2}s", "{entry}"),
+    # Same, once the cursor is on the last digit: right now submits.
+    "entering_last": ("RIGHT=SUBMIT {secs:>2}s", "{entry}"),
     "wrong_code": ("WRONG CODE", "{left} LEFT"),
     "expired": ("CODE EXPIRED", "ASK FOR NEW"),
     "burned": ("CODE BURNED", "CALL AGAIN"),

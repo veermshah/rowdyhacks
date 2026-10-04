@@ -51,7 +51,9 @@ def key_in(ch, code, t):
 
 
 def submit(ch, t):
-    return ch.handle_input("button", True, t)
+    """Submits the way the vault does: right off the last digit (key_in leaves the cursor there)."""
+    assert ch.cursor == OTP_LENGTH - 1
+    return ch.handle_input("joystick", "right", t)
 
 
 # --------------------------------------------------------------------------- #
@@ -233,8 +235,8 @@ def test_digit_editing_wraps_and_cursor_clamps():
     assert ch.entry[0] == 0
     ch.handle_input("joystick", "left", t)
     assert ch.cursor == 0
-    for _ in range(OTP_LENGTH + 2):
-        ch.handle_input("joystick", "right", t)
+    for _ in range(OTP_LENGTH - 1):
+        assert ch.handle_input("joystick", "right", t) == []
     assert ch.cursor == OTP_LENGTH - 1
     ch.handle_input("joystick", "up", t)
     assert ch.entry == (0, 0, 0, 1)
@@ -251,12 +253,39 @@ def test_input_is_ignored_outside_the_entering_state():
     assert ch.handle_input("button", True, 1.5) == [] and not ch.verified
 
 
-def test_button_release_event_does_not_submit():
+def test_right_on_the_last_digit_submits_and_earlier_rights_do_not():
+    ch = new_challenge()
+    t = start_entering(ch, 0.0)
+    for _ in range(OTP_LENGTH - 1):
+        assert ch.handle_input("joystick", "right", t) == []   # just moves the cursor
+    assert ch.status == "entering" and not ch.verified
+    key_in(ch, ch.otp, t)   # cursor walks back through the code from here
+    assert ch.cursor == OTP_LENGTH - 1
+
+
+def test_correct_code_auto_submits_without_a_button():
     ch = new_challenge()
     t = start_entering(ch, 0.0)
     key_in(ch, ch.otp, t)
-    assert ch.handle_input("button", False, t) == []
-    assert ch.status == "entering"
+    assert ch.handle_input("joystick", "right", t) == ["done"] and ch.verified
+
+
+def test_lcd_hints_right_to_submit_on_the_last_digit():
+    ch = new_challenge()
+    t = start_entering(ch, 0.0)
+    assert ch._current_lcd_text(t)[0].startswith("ENTER CODE")
+    for _ in range(OTP_LENGTH - 1):
+        ch.handle_input("joystick", "right", t)
+    line1, line2 = ch._current_lcd_text(t)
+    assert line1.startswith("RIGHT=SUBMIT") and len(line1) <= 16 and "[" in line2
+
+
+def test_the_button_no_longer_submits():
+    ch = new_challenge()
+    t = start_entering(ch, 0.0)
+    key_in(ch, ch.otp, t)
+    assert ch.handle_input("button", True, t) == []
+    assert ch.status == "entering" and not ch.verified
 
 
 def test_joystick_orientation_rotate_90(monkeypatch):
@@ -478,7 +507,7 @@ def test_webhook_flow_end_to_end_pays_out_once():
     with server.state_lock:
         ch._enter_entering(time.monotonic())   # skip the 8s on-screen wait for this plumbing test
     sim_key_in(hacker, code)
-    assert hacker.emit("tower_sim_input", {"device": "button", "value": True}, callback=True)["ok"]
+    assert hacker.emit("tower_sim_input", {"device": "joystick", "value": "right"}, callback=True)["ok"]
 
     assert http.get(f"/api/tower/check-otp?carId={car_id}").get_json() == {"result": "OTP VERIFIED"}
     car = server.get_car(car_id)
