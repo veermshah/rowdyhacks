@@ -8,8 +8,10 @@ height, blink score, smile score), and fed into a per-player state machine:
     face detected -> nod -> blink twice -> smile -> vault open ($)
 
 Run locally:   python app.py
-Run on Render: gunicorn -k eventlet -w 1 -b 0.0.0.0:$PORT app:app
-(one worker only: game state lives in memory)
+Run on Render: gunicorn -k gthread -w 1 --threads 8 -b 0.0.0.0:$PORT app:app
+(gthread, not eventlet - gunicorn deleted its eventlet worker in 26.0, so
+this falls back to Flask-SocketIO's "threading" async_mode, same as local
+dev; one worker only: game state lives in memory)
 """
 import base64
 import hashlib

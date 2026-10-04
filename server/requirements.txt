@@ -1,9 +1,8 @@
 flask>=3.0
 flask-socketio>=5.3
 flask-cors>=4.0
-simple-websocket>=1.0   # WebSocket transport for local `python app.py` (threading mode)
-gunicorn>=22.0
-eventlet>=0.36          # production worker: gunicorn -k eventlet -w 1 app:app
+simple-websocket>=1.0   # WebSocket transport for Flask-SocketIO's threading async_mode (local dev AND production - see app.py)
+gunicorn>=22.0          # production: gunicorn -k gthread -w 1 --threads 8 app:app
 opencv-python-headless>=4.9
 mediapipe>=0.10.30
 numpy>=1.26

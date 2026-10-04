@@ -16,10 +16,20 @@ services:
     plan: free
     rootDir: server
     buildCommand: pip install -r requirements.txt && python download_assets.py
-    startCommand: gunicorn -k eventlet -w 1 -b 0.0.0.0:$PORT app:app
+    startCommand: gunicorn -k gthread -w 1 --threads 8 -b 0.0.0.0:$PORT app:app
     # -w 1 only: game state (cars, sessions, alamo_challenges in app.py)
     # lives in plain in-process dicts with no shared store. Multiple workers
     # or instances would each run a disconnected copy of the game.
+    #
+    # gthread, not eventlet: gunicorn deprecated the eventlet worker in
+    # 25.0 and deleted it entirely in 26.0 ("Entry point ('gunicorn.workers',
+    # 'eventlet') not found" is that removal, not a misconfiguration -
+    # requirements.txt's unpinned gunicorn>=22.0 pulls whatever's newest).
+    # gthread is gunicorn's own built-in threaded worker, so Flask-SocketIO
+    # falls back to its "threading" async_mode (app.py's _pick_async_mode())
+    # - the same mode local `python app.py` dev already runs and tests pass
+    # under. --threads 8 caps concurrent long-lived WebSocket connections;
+    # raise it if you expect more than ~8 browsers/Pis connected at once.
     envVars:
       - key: PYTHON_VERSION
         value: 3.12.7

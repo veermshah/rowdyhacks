@@ -5,7 +5,11 @@ services:
     runtime: python
     rootDir: server
     buildCommand: pip install -r requirements.txt && python download_assets.py
-    startCommand: gunicorn -k eventlet -w 1 -b 0.0.0.0:$PORT app:app
+    # gthread, not eventlet: gunicorn deleted its eventlet worker in 26.0.
+    # gthread is gunicorn's built-in threaded worker; Flask-SocketIO falls
+    # back to its "threading" async_mode (see app.py's _pick_async_mode()),
+    # the same mode local `python app.py` dev already runs under.
+    startCommand: gunicorn -k gthread -w 1 --threads 8 -b 0.0.0.0:$PORT app:app
     envVars:
       - key: PYTHON_VERSION
         value: 3.12.7
