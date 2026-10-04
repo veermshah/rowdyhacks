@@ -23,7 +23,7 @@ const STEP_TEXT = {
   TOWER_RINGING: "Phone the bank's fraud line and ask for Margaret. Pose as the account holder - or know the staff override phrase.",
   TOWER_VERIFY: "Margaret is on the line. Talk her into trusting you: once she's satisfied she'll send the one-time code to the vault.",
   TOWER_CODE: 'A code is on the vault screen right now - read it off before it disappears!',
-  TOWER_ENTERING: 'Key it in on the vault joystick: up/down = digit, left/right = position, press the stick = submit.',
+  TOWER_ENTERING: 'Key it in on the vault joystick: up/down = digit, left/right = next digit. Push right once more on the 4th digit to submit - the screen will say RIGHT=SUBMIT.',
   TOWER_DONE: 'Code accepted. The vault is open.',
   TOWER_ALARM: 'Margaret raised the alarm. Security is on the way.',
 };
@@ -74,9 +74,8 @@ function DevPanel({ connected }) {
   return (
     <div className="rw-dev">
       <h3>DEV simulation</h3>
-      <p className="rw-muted">Stands in for the Pi: arrow keys = joystick, Enter = joystick button.</p>
+      <p className="rw-muted">Stands in for the Pi: arrow keys = joystick (right on the 4th digit submits).</p>
       <div className="rw-dev-grid">
-        <button className="rw-dev-btn" onClick={() => towerSimInput('button', true)} disabled={!connected}>Press button (submit)</button>
         <button className="rw-dev-btn" onClick={towerAdminSkip} disabled={!connected}>Skip to done</button>
         <button className="rw-dev-btn" onClick={towerAdminReset} disabled={!connected}>Reset run</button>
         <button className="rw-dev-btn" onClick={toggleShowCode} disabled={!connected}>{revealedCode ? 'Hide' : 'Show'} code</button>
@@ -119,19 +118,18 @@ export default function TowerChallenge() {
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
-  // Dev simulator: arrow keys + Enter stand in for the Pi's joystick and its
-  // button while this dashboard is open. Capture phase so they beat the modal's
+  // Dev simulator: arrow keys stand in for the Pi's joystick while this
+  // dashboard is open. Capture phase so they beat the modal's
   // own stopPropagation, and stopped here so they never also steer the car.
   useEffect(() => {
     if (!HEIST_DEV_TOOLS) return undefined;
     const onKey = (e) => {
       if (e.target instanceof HTMLInputElement) return;
       const move = KEY_TO_MOVE[e.key];
-      if (!move && e.key !== 'Enter') return;
+      if (!move) return;
       e.preventDefault();
       e.stopPropagation();
-      if (move) towerSimInput('joystick', move);
-      else towerSimInput('button', true);
+      towerSimInput('joystick', move);
     };
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);

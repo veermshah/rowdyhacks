@@ -1,4 +1,4 @@
-# Alamo vault Raspberry Pi relay
+﻿# Alamo vault Raspberry Pi relay
 
 Runs on the Raspberry Pi wired to the Arduino Uno (base shield: light sensor,
 joystick + button, servo, I2C LCD) over USB. Reads the Arduino's sensor
@@ -157,7 +157,7 @@ Pi -> server (Socket.IO `input` events):
 {"device": "light", "value": 812}
 {"device": "button", "value": true}
 ```
-(`button` is one event per joystick press - the Tower challenge submits the entered code with it.)
+(`button` is one event per joystick press. The Tower no longer uses it: the code is submitted by pushing the joystick right on the last digit.)
 
 Server -> Pi (Socket.IO `cmd` events, `lcd`/`servo` are relayed to the
 Arduino; `rgb`/`led`/`beep` are logged and dropped since there's no RGB LED,
@@ -177,11 +177,11 @@ and talks her into believing they're the account holder (or gives the staff
 override phrase). Margaret then "sends a one-time code to the device on
 file": the **server** generates a 4-digit code and pushes it to the vault LCD
 for ~8 seconds. The crew reads it off and keys it in on the joystick before it
-expires (30 s): up/down = digit (0-9, wraps), left/right = position, joystick
-**button** = submit. Correct and in time = servo pops, bearer bonds paid out.
+expires (30 s): up/down = digit (0-9, wraps), left/right = position,
+right on the last digit = submit. Correct and in time = servo pops, bearer bonds paid out.
 
 The Pi needs no change for this: the code arrives as an ordinary `lcd` cmd
-(the server formats it) and the button is just another `input` event.
+(the server formats it) and the submit is just another joystick `input` event.
 
 **Who knows what**
 - The **ElevenLabs agent** owns everything about identity: the holder name,
