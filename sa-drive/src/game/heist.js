@@ -92,6 +92,7 @@ export function openRiverwalk(reason) {
 
 export function closeRiverwalk() {
   set({ riverwalkOpen: false });
+  socket?.emit('leave_checkpoint'); // free the Presage scanner for other players
 }
 
 export function restartChallenge() {
@@ -110,10 +111,27 @@ export function devResetCar() {
   });
 }
 
-/** Send one JPEG frame; calls done() when the server has answered (or timed out). */
+/** Dev: wipe this run's heist (loot, wanted level, vault) and restart the checkpoint; the popup stays open. */
+export function devReplayRiverwalk() {
+  socket?.emit('reset_car', () => {
+    set({ alarm: null, lastReward: null, challenge: null, cash: 0, wantedLevel: 0, riverwalkCleared: false });
+    socket?.emit('start_challenge', applySnapshot);
+  });
+}
+
+/** New run (game restarted): close the popup and wipe this car's loot, wanted level and vault. */
+export function resetHeistRun() {
+  set({ riverwalkOpen: false, alarm: null, lastReward: null, challenge: null, cash: 0, wantedLevel: 0, riverwalkCleared: false });
+  socket?.emit('reset_car');
+}
+
+/**
+ * Send one JPEG frame to the Presage scanner (the server timestamps it on
+ * arrival). Calls done() when the server has answered (or timed out).
+ */
 export function sendFrame(buf, done) {
   if (!socket?.connected) return done();
-  socket.timeout(3000).emit('frame', buf, (err, snap) => {
+  socket.timeout(3000).emit('frame', { image: buf }, (err, snap) => {
     if (!err) applySnapshot(snap);
     done();
   });

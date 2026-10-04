@@ -1,5 +1,5 @@
 /* Riverwalk heist UI. Palette follows the existing navigation card (index.css). */
-.heist-hud, .heist-dev-open, .rw-modal {
+.heist-hud, .heist-dev-open, .heist-dev-skip, .rw-modal {
   --h-panel: #0c1a28ee;
   --h-line: #76e9f333;
   --h-text: #e9faff;
@@ -26,13 +26,18 @@
 .heist-dev-open:hover { background: #3d2608; }
 .heist-dev-open:focus-visible { outline: 2px solid var(--h-warn); outline-offset: 2px; }
 
+/* Dev-only testing shortcut; sits above the Calibrate start screen (z-index 100). */
+.heist-dev-skip { position: fixed; top: 104px; left: 18px; z-index: 110; padding: 8px 12px; border: 1px dashed var(--h-warn); border-radius: 8px; background: #2a1a05e6; color: var(--h-warn); font-size: 11px; font-weight: 700; letter-spacing: .5px; cursor: pointer; }
+.heist-dev-skip:hover { background: #3d2608; }
+.heist-dev-skip:focus-visible { outline: 2px solid var(--h-warn); outline-offset: 2px; }
+
 /* ---- Modal ---- */
 /* flex column + margin:auto (not place-items/justify-content:center) so a
    modal taller than the viewport stays fully scrollable instead of being
    centered-and-clipped - centered alignment on a scroll container only lets
    you scroll halfway to an overflowing child in most browsers. */
-.rw-backdrop { position: fixed; inset: 0; z-index: 120; display: flex; flex-direction: column; align-items: center; padding: 16px; background: #030b18b8; backdrop-filter: blur(6px); overflow-y: auto; }
-.rw-modal { width: min(940px, 100%); margin: auto 0; padding: 20px; background: var(--h-panel); border: 1px solid var(--h-line); border-radius: 18px; color: var(--h-text); box-shadow: 0 20px 60px #000a; }
+.rw-backdrop { position: fixed; inset: 0; z-index: 120; display: grid; place-items: center; padding: 16px; background: #030b18b8; backdrop-filter: blur(6px); overflow-y: auto; }
+.rw-modal { width: min(940px, 100%); max-height: calc(100vh - 32px); overflow-y: auto; padding: 20px; background: var(--h-panel); border: 1px solid var(--h-line); border-radius: 18px; color: var(--h-text); box-shadow: 0 20px 60px #000a; }
 .rw-modal h3 { margin: 0 0 8px; font-size: 10px; letter-spacing: 2px; color: var(--h-muted); font-weight: 600; }
 .rw-head { display: flex; justify-content: space-between; align-items: start; gap: 12px; }
 .rw-eyebrow { font-size: 9px; letter-spacing: 2.4px; color: var(--h-muted); }
@@ -56,11 +61,18 @@
 .rw-paused strong { color: var(--h-warn); }
 .rw-alarm { background: #4a0010d9; animation: rw-strobe .8s infinite; }
 .rw-done { background: #00382cd9; }
+.rw-cleared { background: #0b1622e6; }
+.rw-cleared strong { color: var(--h-muted); }
+.rw-cleared-badge { padding: 3px 10px; border: 1px solid var(--h-muted); border-radius: 999px; font-size: 10px; letter-spacing: 2px; color: var(--h-muted); }
 .rw-done strong { color: var(--h-cash); font-size: clamp(30px, 6vw, 46px); }
 .rw-reward { display: flex; flex-direction: column; gap: 6px; font-size: 18px; font-weight: 700; }
 .rw-heat { color: #ff8095; }
 .rw-face-pill { position: absolute; top: 12px; left: 12px; padding: 4px 10px; border-radius: 999px; font-size: 11px; font-weight: 700; letter-spacing: 1px; background: var(--h-danger); }
 .rw-face-pill.ok { background: var(--h-accent); color: #002a26; }
+.rw-sensor { position: absolute; left: 12px; right: 12px; bottom: 12px; padding: 6px 10px; border-radius: 8px; background: #050a12cc; color: var(--h-muted); font-size: 12px; text-align: center; }
+.rw-sensor.ok { color: var(--h-accent); }
+.rw-sensor.warn { color: var(--h-warn); }
+.rw-sensor.err { color: #ff8095; }
 .rw-timer { position: absolute; top: 0; left: 0; right: 0; height: 4px; background: #ffffff1a; }
 .rw-timer div { height: 100%; background: var(--h-warn); transition: width .2s linear; }
 
@@ -70,6 +82,7 @@
 .rw-checklist li.current { color: var(--h-text); border-color: var(--h-warn); }
 .rw-checklist li.done { color: var(--h-accent); border-color: #71e8e7; background: #255660aa; }
 .rw-check { width: 16px; text-align: center; font-weight: 800; }
+.rw-lock { margin-left: auto; font-size: 11px; letter-spacing: 2px; color: #ffffff40; }
 .rw-count { margin-left: auto; color: var(--h-warn); font-variant-numeric: tabular-nums; }
 .rw-attempts { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--h-muted); }
 .rw-pip { width: 12px; height: 12px; border-radius: 50%; border: 1px solid var(--h-muted); }

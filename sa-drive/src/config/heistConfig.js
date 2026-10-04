@@ -4,11 +4,14 @@ import { toLocal } from './worldConfig.js';
 // import.meta.env is Vite-only; plain Node (scripts/validate-*.mjs) imports this too.
 const env = import.meta.env ?? {};
 
-// Flask-SocketIO Riverwalk server (see /server). Set VITE_HEIST_SERVER_URL on Vercel.
-export const HEIST_SERVER_URL = env.VITE_HEIST_SERVER_URL || 'http://localhost:5000';
+// Riverwalk server (see /server). Set VITE_HEIST_SERVER_URL on Vercel. For a demo
+// with the server on your own laptop, open the game with ?server=http://localhost:5000
+// (Chrome allows an https page to talk to localhost).
+const serverParam = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('server') : null;
+export const HEIST_SERVER_URL = serverParam || env.VITE_HEIST_SERVER_URL || 'http://localhost:5000';
 
-// Dev-only UI: force-open button, simulate buttons, reset. On in `npm run dev`;
-// opt in on a deployed build with VITE_HEIST_DEV_TOOLS=true.
+// Dev-only UI inside the popup (Simulate buttons, sensor readout). On in
+// `npm run dev`, off in production builds unless VITE_HEIST_DEV_TOOLS=true.
 export const HEIST_DEV_TOOLS = !!env.DEV || env.VITE_HEIST_DEV_TOOLS === 'true';
 
 // Riverwalk checkpoint: the challenge opens when the car gets within TRIGGER

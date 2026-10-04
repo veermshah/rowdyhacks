@@ -43,3 +43,24 @@ services:
       # dev tools live (e.g. at a demo table).
       - key: RIVERWALK_DEV_MODE
         value: "0"
+
+  # ---- Node.js + Presage SmartSpectra (alternative to the Python server) ----
+  # Render dashboard -> New -> Blueprint -> pick this repo/branch.
+  - type: web
+    name: lootrun-presage
+    runtime: docker
+    rootDir: server
+    dockerfilePath: ./Dockerfile
+    # Presage analyses ~30 frames/s on this machine's CPU. The free plan (0.1 CPU)
+    # cannot keep up; use at least "standard" (1 CPU) for real face scanning.
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: PRESAGE_API_KEY
+        sync: false
+      # Your friend's Vercel URL(s), comma-separated, no trailing slash.
+      - key: CORS_ORIGINS
+        sync: false
+      # 0 = dev Simulate buttons disabled on the server.
+      - key: RIVERWALK_DEV_MODE
+        value: "0"
