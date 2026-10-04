@@ -30,6 +30,8 @@ import { buildRiverNetwork, riverObstacles } from './lib/riverNetwork.js';
 import { buildRoadGrid, queryNearestRoad } from './lib/grid.js';
 import HeistLayer from './heist/HeistLayer.jsx';
 import DrivingAudio from './audio/DrivingAudio.jsx';
+import Rain from './world/Rain.jsx';
+import ScreenRain from './ui/ScreenRain.jsx';
 
 export default function App() {
   const videoRef = useRef(null);
@@ -143,6 +145,7 @@ export default function App() {
 
         <Landmarks />
         <Car />
+        <Rain />
         {mapData && <Gameplay />}
         <CameraRig />
       </Canvas>
@@ -166,6 +169,7 @@ export default function App() {
       {started && <PursuitHud />}
       <DebugPanel />
       <HeistLayer videoRef={videoRef} />
+      <ScreenRain />
     </>
   );
 }
