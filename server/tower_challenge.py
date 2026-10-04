@@ -1,7 +1,8 @@
 """Tower vault challenge: the state machine behind Challenge 3 ("The Callback").
 
     TOWER_RINGING  (waiting for the crew to phone the bank's fraud line)
-    -> TOWER_VERIFY   (Margaret, the voice agent, is checking who's calling)
+    -> TOWER_VERIFY   (Margaret, the voice agent, has picked up and is checking
+                       who's calling - entirely on the ElevenLabs side)
     -> TOWER_CODE     (server made a one-time code and pushed it to the vault LCD)
     -> TOWER_ENTERING (code left the screen; crew keys it in on the joystick)
     -> TOWER_DONE     (code accepted in time: vault pops, bearer bonds paid out)
@@ -11,7 +12,10 @@ SECURITY: the one-time code is generated and verified ONLY here. Margaret (an
 ElevenLabs agent) reaches this class through webhook tools (the agent_*
 methods) and never receives the code - `agent_send_otp` returns "code sent"
 and nothing else - so she can't be talked into reading it out or skipping the
-check. `agent_approve_transfer` refuses unless the code was entered correctly
+check. She CAN be talked into sending a code: the account facts and override
+phrase are judged by her alone (they live in the ElevenLabs agent, never in
+this code), which is the social-engineering part of the puzzle. `agent_check_otp`
+lets her learn the joystick result without ever seeing the code. `agent_approve_transfer` refuses unless the code was entered correctly
 on the joystick. The code is also never in a snapshot (the vault LCD preview
 is masked while the code is showing); it goes only to the Pi's LCD cmd.
 
@@ -31,20 +35,17 @@ import hmac
 import logging
 import math
 import random
-import re
 
 from alamo_challenge import MOVES, ChangeThrottle
 from tower_config import (
-    ACCOUNT_FACTS, BEEP_ALARM_MS, BEEP_CODE_MS, BEEP_SHORT_MS,
+    BEEP_ALARM_MS, BEEP_CODE_MS, BEEP_SHORT_MS,
     BEEP_VICTORY_GAP_S, BEEP_VICTORY_PATTERN_MS, BEEP_WRONG_MS, BRIEFING,
     COLOR_ALARM, COLOR_CODE, COLOR_DONE, COLOR_ENTERING, COLOR_FLASH_OFF,
     COLOR_FLASH_ON, COLOR_IDLE, COLOR_RINGING, COLOR_VERIFY, EVENT_MESSAGE_S,
     FLASH_COUNT, FLASH_STEP_S, JOYSTICK_ORIENTATION, LCD_MAX_LEN,
     LCD_MIN_SEND_INTERVAL_S, LCD_STATUS, MAX_OTP_ATTEMPTS, MAX_SUSPICION_PER_CALL,
     MAX_TRANSFER, OTP_DISPLAY_S, OTP_LENGTH, OTP_TTL_S, RGB_MIN_SEND_INTERVAL_S,
-    SECRET_PHRASE, SERVO_OPEN_ON_DONE, SUSPICION_ALARM_THRESHOLD,
-    SUSPICION_BURNED_OTP, SUSPICION_DENIED_OVERRIDE, SUSPICION_WRONG_ANSWER,
-    VERIFY_ANSWERS_REQUIRED,
+    SERVO_OPEN_ON_DONE, SUSPICION_ALARM_THRESHOLD, SUSPICION_BURNED_OTP,
 )
 
 log = logging.getLogger(__name__)
@@ -88,21 +89,6 @@ def normalize_joystick(raw):
     return v
 
 
-def _words(text):
-    """Lowercase alphanumeric words, with possessives folded ("dog's" -> "dog")."""
-    text = re.sub(r"['’]s\b", "", str(text or "").lower())
-    return re.findall(r"[a-z0-9]+", text)
-
-
-def _lookup_fact(question):
-    """The ACCOUNT_FACTS key whose words all appear in the question, or None."""
-    asked = set(_words(question))
-    for key in ACCOUNT_FACTS:
-        if set(_words(key)) <= asked:
-            return key
-    return None
-
-
 class TowerChallenge:
     """status: idle | ringing | verify | code | entering | done | alarm."""
 
@@ -125,8 +111,6 @@ class TowerChallenge:
 
     def _reset_state(self):
         self.status = "idle"
-        self.identity_verified = False
-        self.answered = frozenset()       # ACCOUNT_FACTS keys answered correctly
         self.suspicion = 0
         self.alarm_reason = None
 
@@ -155,7 +139,6 @@ class TowerChallenge:
 
     def skip(self, now):
         """Admin: jump straight to TOWER_DONE."""
-        self.identity_verified = True
         self.verified_code = self.verified_code or self.otp or self._new_code()
         self._enter_done(now)
         self._flush(now, force=True)
@@ -256,35 +239,12 @@ class TowerChallenge:
             self._flush(now)
         return self.status in ("done", "alarm")
 
-    def agent_verify(self, question, answer, now):
-        """Checks one account-security answer. Returns ("correct"|"wrong", events)."""
-        if self._begin_call(now):
-            return LOCKED, []
-        key = _lookup_fact(question)
-        given = " ".join(_words(answer))
-        if key is not None and given and " ".join(_words(ACCOUNT_FACTS[key])) in given:
-            self.answered = self.answered | {key}
-            if len(self.answered) >= VERIFY_ANSWERS_REQUIRED:
-                self.identity_verified = True
-            return "correct", []
-        return "wrong", self._add_suspicion(SUSPICION_WRONG_ANSWER, "wrong account answer", now)
-
-    def agent_override(self, phrase, now):
-        """Checks the staff override phrase. Returns ("OVERRIDE ACCEPTED"|"OVERRIDE DENIED", events)."""
-        if self._begin_call(now):
-            return LOCKED, []
-        if " ".join(_words(SECRET_PHRASE)) in " ".join(_words(phrase)):
-            self.identity_verified = True
-            return "OVERRIDE ACCEPTED", []
-        return "OVERRIDE DENIED", self._add_suspicion(SUSPICION_DENIED_OVERRIDE, "bad override phrase", now)
-
     def agent_send_otp(self, now):
         """Generates the code and pushes it to the vault LCD. Returns
-        ("code sent", events) - the code itself goes ONLY to the Pi."""
+        ("code sent", events) - the code itself goes ONLY to the Pi. Margaret
+        decides when she's satisfied the caller is who they say they are."""
         if self._begin_call(now):
             return LOCKED, []
-        if not self.identity_verified:
-            return "identity not verified", []
         if self.otp_status == "sent":
             return "code already sent", []
         self.otp = self._new_code()
@@ -296,6 +256,21 @@ class TowerChallenge:
         self._enter_code(now)
         self._flush(now, force=True)
         return "code sent", ["code_sent"]
+
+    def agent_check_otp(self, now):
+        """How the joystick entry is going, in words for Margaret. Read-only,
+        and never reveals the code."""
+        if self.status == "alarm":
+            return LOCKED
+        if self.verified:
+            return "OTP VERIFIED"
+        if self.otp_status in ("expired", "burned"):
+            return "OTP FAILED - that code is dead, send a new one"
+        if self.otp_status == "sent":
+            if self.attempts_left < MAX_OTP_ATTEMPTS:
+                return "OTP FAILED - they can re-enter it"
+            return "OTP PENDING"
+        return "OTP NOT SENT"
 
     def agent_raise_suspicion(self, amount, reason, now):
         """Margaret's own hunch that something's off. Returns (message, events);
@@ -501,7 +476,6 @@ class TowerChallenge:
             "otpRemainingS": remaining,
             "attemptsLeft": self.attempts_left,
             "suspicion": self.suspicion,
-            "identityVerified": self.identity_verified,
             "entry": list(self.entry) if self.status == "entering" else None,
             "cursor": self.cursor if self.status == "entering" else None,
             "currentLcdText": self._public_lcd_text(now) if self.active else ["", ""],

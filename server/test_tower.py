@@ -1,6 +1,7 @@
 """Tests for the Tower vault state machine (Challenge 3, "The Callback") using
 synthetic input and direct calls for Margaret's webhook tools (no hardware, no
-ElevenLabs needed).
+ElevenLabs needed). Identity checking (facts, override phrase) lives entirely
+in the ElevenLabs agent, so it is deliberately not tested - or present - here.
 
 Run: python -m pytest test_tower.py -q
 """
@@ -13,10 +14,10 @@ import pytest
 import app as server
 import tower_challenge as tower
 from tower_challenge import TowerChallenge, normalize_joystick
+import tower_config
 from tower_config import (
-    ACCOUNT_FACTS, MAX_OTP_ATTEMPTS, MAX_TRANSFER, OTP_DISPLAY_S, OTP_LENGTH,
-    OTP_TTL_S, SECRET_PHRASE, SUSPICION_ALARM_THRESHOLD, SUSPICION_WRONG_ANSWER,
-    TOWER_REWARD, TOWER_WANTED_ON_CLEAR,
+    MAX_OTP_ATTEMPTS, MAX_TRANSFER, OTP_DISPLAY_S, OTP_LENGTH, OTP_TTL_S,
+    SUSPICION_ALARM_THRESHOLD, TOWER_REWARD, TOWER_WANTED_ON_CLEAR,
 )
 
 
@@ -24,17 +25,9 @@ def new_challenge(seed=1):
     return TowerChallenge(rng=random.Random(seed))
 
 
-def verify_identity(ch, t):
-    """Two correct answers, the way Margaret would ask."""
-    assert ch.agent_verify("What is your dog's name?", "Biscuit", t)[0] == "correct"
-    assert ch.agent_verify("Which city did you grow up in? hometown", "I'm from Dayton", t)[0] == "correct"
-    assert ch.identity_verified
-
-
 def send_otp(ch, t):
-    """Verifies identity and sends the code. Returns t."""
+    """Starts a call and has Margaret send the code. Returns t."""
     ch.start(t)
-    verify_identity(ch, t)
     assert ch.agent_send_otp(t) == ("code sent", ["code_sent"])
     return t
 
@@ -68,9 +61,7 @@ def test_full_happy_path_verify_send_enter_done():
     ch = new_challenge()
     ch.start(0.0)
     assert ch.status == "ringing"
-
-    verify_identity(ch, 1.0)
-    assert ch.status == "verify"
+    assert ch.agent_check_otp(1.0) == "OTP NOT SENT"
 
     result, events = ch.agent_send_otp(2.0)
     assert result == "code sent" and events == ["code_sent"] and ch.status == "code"
@@ -98,25 +89,6 @@ def test_approve_transfer_after_verified_is_capped():
     assert ch.agent_approve_transfer("junk", t)[2] == 0
 
 
-def test_override_phrase_path_to_done():
-    ch = new_challenge()
-    ch.start(0.0)
-    assert ch.agent_override("the phrase is Silver   ARMADILLO!", 1.0) == ("OVERRIDE ACCEPTED", [])
-    assert ch.identity_verified and ch.answered == frozenset()
-    assert ch.agent_send_otp(2.0)[0] == "code sent"
-    t = 2.0 + OTP_DISPLAY_S + 0.1
-    ch.tick(t)
-    key_in(ch, ch.otp, t)
-    assert submit(ch, t) == ["done"]
-
-
-def test_wrong_override_is_denied_and_raises_suspicion():
-    ch = new_challenge()
-    ch.start(0.0)
-    result, _ = ch.agent_override("golden armadillo", 1.0)
-    assert result == "OVERRIDE DENIED" and not ch.identity_verified and ch.suspicion > 0
-
-
 # --------------------------------------------------------------------------- #
 # Margaret can't skip the check
 # --------------------------------------------------------------------------- #
@@ -124,20 +96,9 @@ def test_approve_transfer_refused_before_the_code_is_entered():
     ch = new_challenge()
     ch.start(0.0)
     assert ch.agent_approve_transfer(5000, 0.0) == (False, "not verified", 0)
-    verify_identity(ch, 1.0)
-    assert ch.agent_approve_transfer(5000, 1.0)[0] is False   # identity alone isn't enough
     ch.agent_send_otp(2.0)
     assert ch.agent_approve_transfer(5000, 2.0)[0] is False   # code sent but not entered
     assert ch.status != "done"
-
-
-def test_send_otp_refused_until_identity_is_verified():
-    ch = new_challenge()
-    ch.start(0.0)
-    assert ch.agent_send_otp(0.0) == ("identity not verified", [])
-    assert ch.otp is None and ch.status == "verify"
-    assert ch.agent_verify("dog name", "Biscuit", 1.0)[0] == "correct"
-    assert ch.agent_send_otp(1.0)[0] == "identity not verified"   # one answer isn't enough
 
 
 def test_send_otp_never_returns_the_code_and_cannot_be_asked_twice():
@@ -151,48 +112,9 @@ def test_send_otp_never_returns_the_code_and_cannot_be_asked_twice():
 def test_tool_calls_after_done_are_refused():
     ch = new_challenge()
     ch.skip(0.0)
-    assert ch.agent_verify("dog name", "Biscuit", 1.0) == ("locked", [])
+    assert ch.agent_send_otp(1.0) == ("locked", [])
     assert ch.agent_trigger_alarm("x", 1.0) == ("locked", [])
     assert ch.status == "done"
-
-
-# --------------------------------------------------------------------------- #
-# Identity checks
-# --------------------------------------------------------------------------- #
-@pytest.mark.parametrize("question,answer,expected", [
-    ("What is your dog's name?", "biscuit", "correct"),
-    ("dog name", "It's Biscuit, why?", "correct"),
-    ("What are the last four digits of your account?", "7742", "correct"),
-    ("Where do you work? employer", "Delmont Logistics", "correct"),
-    ("dog name", "Rex", "wrong"),
-    ("dog name", "", "wrong"),
-    ("favorite color", "Biscuit", "wrong"),
-])
-def test_verify_answer_matching(question, answer, expected):
-    ch = new_challenge()
-    ch.start(0.0)
-    assert ch.agent_verify(question, answer, 0.0)[0] == expected
-
-
-def test_repeating_one_correct_answer_does_not_prove_identity():
-    ch = new_challenge()
-    ch.start(0.0)
-    for _ in range(4):
-        ch.agent_verify("dog name", "Biscuit", 0.0)
-    assert not ch.identity_verified
-
-
-def test_every_account_fact_is_answerable():
-    for key, value in ACCOUNT_FACTS.items():
-        ch = new_challenge()
-        ch.start(0.0)
-        assert ch.agent_verify(key, value, 0.0)[0] == "correct", key
-
-
-def test_secret_phrase_constant_matches_config():
-    ch = new_challenge()
-    ch.start(0.0)
-    assert ch.agent_override(SECRET_PHRASE, 0.0)[0] == "OVERRIDE ACCEPTED"
 
 
 # --------------------------------------------------------------------------- #
@@ -277,16 +199,6 @@ def test_code_leaves_the_screen_after_display_time():
 # --------------------------------------------------------------------------- #
 # Suspicion / alarm
 # --------------------------------------------------------------------------- #
-def test_wrong_answers_accumulate_to_an_alarm():
-    ch = new_challenge()
-    ch.start(0.0)
-    needed = -(-SUSPICION_ALARM_THRESHOLD // SUSPICION_WRONG_ANSWER)
-    events = []
-    for _ in range(needed):
-        _, events = ch.agent_verify("dog name", "Rex", 0.0)
-    assert events == ["alarm"] and ch.status == "alarm"
-
-
 def test_raise_suspicion_returns_alarm_flag_at_threshold_and_clamps():
     ch = new_challenge()
     ch.start(0.0)
@@ -380,8 +292,7 @@ def test_code_is_never_in_any_snapshot(seed):
 def test_code_is_not_in_the_agent_return_values():
     ch = new_challenge()
     ch.start(0.0)
-    verify_identity(ch, 0.0)
-    out = ch.agent_send_otp(1.0)
+    out = [ch.agent_send_otp(1.0), ch.agent_check_otp(1.0), ch.agent_approve_transfer(1, 1.0)]
     assert ch.otp not in json.dumps(out)
 
 
@@ -408,7 +319,7 @@ def test_admin_reset_starts_a_fresh_run():
     ch = new_challenge()
     start_entering(ch, 0.0)
     ch.reset(50.0)
-    assert ch.status == "ringing" and ch.otp is None and ch.suspicion == 0 and not ch.identity_verified
+    assert ch.status == "ringing" and ch.otp is None and ch.suspicion == 0
 
 
 def test_idle_challenge_is_inactive_and_snapshots_empty():
@@ -419,8 +330,59 @@ def test_idle_challenge_is_inactive_and_snapshots_empty():
 
 def test_agent_call_on_an_idle_vault_starts_the_call():
     ch = new_challenge()
-    assert ch.agent_verify("dog name", "Biscuit", 0.0)[0] == "correct"
-    assert ch.status == "verify"
+    assert ch.agent_raise_suspicion(10, "odd", 0.0) == ("noted", [])
+    assert ch.status == "verify" and ch.suspicion == 10
+
+
+def test_nothing_about_identity_lives_on_the_server():
+    """Facts, holder name and override phrase belong to the ElevenLabs agent."""
+    for name in ("ACCOUNT_FACTS", "SECRET_PHRASE", "HOLDER_NAME"):
+        assert not hasattr(tower_config, name)
+    ch = new_challenge()
+    for name in ("agent_verify", "agent_override", "identity_verified"):
+        assert not hasattr(ch, name)
+
+
+# --------------------------------------------------------------------------- #
+# checkOtp: how Margaret learns the joystick result (never the code)
+# --------------------------------------------------------------------------- #
+def test_check_otp_tracks_the_joystick_entry():
+    ch = new_challenge()
+    ch.start(0.0)
+    assert ch.agent_check_otp(0.0) == "OTP NOT SENT"
+    t = start_entering(ch, 1.0)
+    assert ch.agent_check_otp(t) == "OTP PENDING"
+    key_in(ch, wrong_code_for(ch), t)
+    submit(ch, t)
+    assert ch.agent_check_otp(t) == "OTP FAILED - they can re-enter it"
+    for _ in range(OTP_LENGTH):   # walk back to position 0 and zero the digits
+        ch.handle_input("joystick", "left", t)
+    ch.entry = (0,) * OTP_LENGTH
+    key_in(ch, ch.otp, t)
+    submit(ch, t)
+    assert ch.agent_check_otp(t) == "OTP VERIFIED"
+
+
+def test_check_otp_reports_dead_codes_and_alarm():
+    ch = new_challenge()
+    t = start_entering(ch, 0.0)
+    ch.tick(t + OTP_TTL_S)
+    assert ch.agent_check_otp(t + OTP_TTL_S).startswith("OTP FAILED")
+    ch.agent_trigger_alarm("x", t + OTP_TTL_S)
+    assert ch.agent_check_otp(t + OTP_TTL_S) == "locked"
+
+
+def test_check_otp_does_not_start_a_call_or_change_state():
+    ch = new_challenge()
+    assert ch.agent_check_otp(0.0) == "OTP NOT SENT"
+    assert ch.status == "idle"
+
+
+def test_send_otp_works_without_any_server_side_identity_check():
+    """Margaret decides when she is satisfied; the server trusts her."""
+    ch = new_challenge()
+    ch.start(0.0)
+    assert ch.agent_send_otp(0.0)[0] == "code sent"
 
 
 def test_snapshot_shape_and_substage_names():
@@ -498,8 +460,7 @@ def test_webhook_flow_end_to_end_pays_out_once():
     res = post(http, "approve-transfer", car_id, amount=TOWER_REWARD)
     assert res.status_code == 403 and res.get_json()["result"] == "not verified"
 
-    assert post(http, "verify-answer", car_id, question="dog name", answer="Biscuit").get_json() == {"result": "correct"}
-    assert post(http, "verify-answer", car_id, question="hometown", answer="Dayton").get_json() == {"result": "correct"}
+    assert post(http, "check-otp", car_id).get_json() == {"result": "OTP NOT SENT"}
     otp_res = post(http, "send-otp", car_id)
     assert otp_res.get_json() == {"result": "code sent"}   # no code in the response
 
@@ -510,14 +471,16 @@ def test_webhook_flow_end_to_end_pays_out_once():
     pi_cmds = [m["args"][0] for m in pi.get_received() if m["name"] == "cmd"]
     assert any(c["type"] == "lcd" and code in c["line2"] for c in pi_cmds)
 
-    # Still refused while the code is unentered, even with identity proven.
+    # Still refused while the code is unentered, even though Margaret sent it.
     assert post(http, "approve-transfer", car_id, amount=TOWER_REWARD).status_code == 403
+    assert post(http, "check-otp", car_id).get_json() == {"result": "OTP PENDING"}
 
     with server.state_lock:
         ch._enter_entering(time.monotonic())   # skip the 8s on-screen wait for this plumbing test
     sim_key_in(hacker, code)
     assert hacker.emit("tower_sim_input", {"device": "button", "value": True}, callback=True)["ok"]
 
+    assert http.get(f"/api/tower/check-otp?carId={car_id}").get_json() == {"result": "OTP VERIFIED"}
     car = server.get_car(car_id)
     assert car.tower_cleared and car.loot == TOWER_REWARD and car.wanted_level == TOWER_WANTED_ON_CLEAR
     assert car.tower_code == code   # spent code, only after it was used
@@ -559,13 +522,14 @@ def test_webhook_raise_suspicion_alarm_and_bad_json():
     assert post(http, "raise-suspicion", car_id, amount=500, reason="fake").get_json() == {"result": "alarm triggered"}
     # Non-JSON body falls back to the default car instead of crashing.
     res = http.post("/api/tower/send-otp", data="not json", content_type="text/plain")
-    assert res.status_code == 200 and res.get_json()["result"] == "identity not verified"
+    assert res.status_code == 200 and res.get_json()["result"] == "code sent"
 
 
 def test_webhook_shared_secret_is_enforced_when_configured(monkeypatch):
     monkeypatch.setattr(server, "TOWER_WEBHOOK_SECRET", "s3cret")
     http = server.app.test_client()
     assert post(http, "send-otp", "car-tower4").status_code == 401
+    assert post(http, "check-otp", "car-tower4").status_code == 401
     res = http.post("/api/tower/send-otp", json={"carId": "car-tower4"}, headers={"X-Tower-Secret": "s3cret"})
     assert res.status_code == 200
 

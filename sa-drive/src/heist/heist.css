@@ -197,8 +197,6 @@
 .tw-alarm-banner { padding: 14px; border-radius: 10px; background: #4a0010d9; text-align: center; }
 .tw-alarm-banner strong { font-size: clamp(20px, 4vw, 28px); letter-spacing: 3px; color: #ff8095; }
 .tw-dev-sub { margin-top: 12px; }
-.tw-dev-fields { display: flex; flex-direction: column; gap: 4px; margin-bottom: 6px; }
-.tw-dev-fields input { padding: 6px 8px; border: 1px solid #ffb34755; border-radius: 6px; background: #1a1105; color: #ffd9a8; font-size: 11px; }
 
 @keyframes heist-flash { from { filter: brightness(2.2); transform: scale(1.15); } }
 @keyframes rw-strobe { 50% { background: #7a0018d9; } }
