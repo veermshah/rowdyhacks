@@ -53,6 +53,7 @@ export function moveWithCollision(car, input, dt, grid, step) {
     const x=car.x,z=car.z;
     step(car,input,Math.min(dt,.05)/count);
     if(overlapsBuilding(grid,car.x,car.z)) {
+      car.impactSpeed=Math.abs(car.v);car.impactSerial=(car.impactSerial||0)+1;
       car.x=x;car.z=z;car.v=0;break;
     }
   }

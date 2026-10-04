@@ -102,7 +102,7 @@ export default function Calibrate({ videoRef, onReady }) {
 
   return (
     <div style={overlay}>
-      <h1 style={{ fontSize: 42, marginBottom: 8 }}>SA Drive</h1>
+      <h1 style={{ fontSize: 42, marginBottom: 8 }}>Hack Stash</h1>
       <p style={{ color: '#aaa', fontSize: 16, marginBottom: 24 }}>
         Follow the glowing road route. Stay ahead of the police.
       </p>

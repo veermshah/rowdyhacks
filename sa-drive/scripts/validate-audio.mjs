@@ -1,0 +1,16 @@
+import assert from 'node:assert/strict';
+import { drivingMix } from '../src/audio/drivingMix.js';
+const car={x:0,z:0,yaw:0,v:20,maxSpeed:38,offroad:false};
+const input={gas:1,brake:0,steer:0,reverse:false};
+const game={ready:true,started:true,caught:false,paused:false,police:{x:0,z:-80,active:true}};
+const mix=drivingMix(car,input,game);
+assert(mix.active && mix.engineHz>drivingMix({...car,v:0},{...input,gas:0},game).engineHz);
+assert(mix.road>0 && mix.grass===0);
+const grass=drivingMix({...car,offroad:true},input,game);assert(grass.road===0&&grass.grass>0);
+assert(drivingMix(car,{...input,brake:1},game).skid>mix.skid);
+assert(drivingMix({...car,v:-5},{...input,reverse:true},game).reverse);
+assert(drivingMix(car,input,{...game,police:{x:0,z:-250,active:true}}).siren<mix.siren);
+assert(drivingMix(car,input,{...game,police:{x:80,z:0,active:true}}).pan>0);
+for(const patch of [{paused:true},{caught:true},{started:false},{ready:false}])assert(!drivingMix(car,input,{...game,...patch}).active);
+assert.equal(drivingMix(car,input,{...game,police:null}).siren,0);
+console.log('PASS audio mix: acceleration, braking, road/grass, reverse, distance/pan, pause and caught gating');
