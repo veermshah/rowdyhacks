@@ -8,7 +8,14 @@
 //
 // FaceSignalAdapter turns those packets into the discrete inputs the
 // challenge understands: face present/absent and "nod" | "blink" | "smile".
-import jpeg from 'jpeg-js';
+import sharp from 'sharp';
+
+// Decoding is the main per-frame cost besides Presage itself; libjpeg-turbo (via
+// sharp) is ~4.5x faster than a pure-JS decoder. One frame at a time: frames must
+// reach Presage in order, and extra threads don't help on a small server.
+sharp.concurrency(1);
+sharp.cache(false);
+const MAX_PENDING_FRAMES = 3; // CPU falling behind: drop frames instead of building lag
 
 export const GESTURES = {
   NOD_DELTA: 0.07,          // nose leaves its resting height by this many face-heights...
@@ -163,6 +170,8 @@ export class PresageSession {
     this.error = null;
     this.hint = null;
     this.lastTsUs = 0;
+    this.frameQueue = Promise.resolve();
+    this.pendingFrames = 0;
     this.teardown = Promise.resolve();
     this.starting = null;
     this.retryAfter = 0;
@@ -275,28 +284,35 @@ export class PresageSession {
     this.release(id);
   }
 
-  /** Push one JPEG frame. `clientMs` is the browser capture time (performance.now()). */
+  /**
+   * Queue one JPEG frame for Presage. `clientMs` is the browser capture time
+   * (performance.now()). Returns false if the frame was dropped (not scanning,
+   * or the server is behind); decoding and sendFrame happen asynchronously, in order.
+   */
   sendJpeg(id, jpegBytes, clientMs) {
     if (this.owner !== id || !this.sdk || this.state !== 'running') return false;
-    let img;
-    try {
-      img = jpeg.decode(jpegBytes, { useTArray: true, formatAsRGBA: true, maxResolutionInMP: 2 });
-    } catch {
-      return false;
-    }
-    // Presage needs strictly increasing microsecond timestamps.
+    if (this.pendingFrames >= MAX_PENDING_FRAMES) return false;
+    if (jpegBytes.length < 4 || jpegBytes[0] !== 0xff || jpegBytes[1] !== 0xd8) return false; // not a JPEG
+    // Presage needs strictly increasing microsecond timestamps; assign on arrival.
     let ts = Number.isFinite(clientMs) ? Math.round(clientMs * 1000) : Math.round(performance.now() * 1000);
     if (ts <= this.lastTsUs) ts = this.lastTsUs + 1;
     this.lastTsUs = ts;
-    const { PixelFormat } = this.sdkModule.sdk;
-    try {
-      return this.sdk.sendFrame(img.data, img.width, img.height, img.width * 4, PixelFormat.kRGBA, ts);
-    } catch (e) {
-      // Frames keep coming at 30 fps; log a failing state once, not every frame.
-      if (this.lastSendError !== e.message) this.log.warn('[presage] sendFrame failed', e.code, e.message);
-      this.lastSendError = e.message;
-      return false;
-    }
+    const sdk = this.sdk;
+    this.pendingFrames += 1;
+    this.frameQueue = this.frameQueue
+      .then(() => sharp(jpegBytes, { limitInputPixels: 2_000_000 }).removeAlpha().raw().toBuffer({ resolveWithObject: true }))
+      .then(({ data, info }) => {
+        if (this.sdk !== sdk || this.state !== 'running') return; // session ended while decoding
+        const { PixelFormat } = this.sdkModule.sdk;
+        sdk.sendFrame(data, info.width, info.height, info.width * 3, PixelFormat.kRGB, ts);
+      })
+      .catch((e) => {
+        // Frames keep coming at 30 fps; log a failing state once, not every frame.
+        if (this.lastSendError !== e.message) this.log.warn('[presage] frame dropped:', e.code ?? '', e.message);
+        this.lastSendError = e.message;
+      })
+      .finally(() => { this.pendingFrames -= 1; });
+    return true;
   }
 
   /** Stop scanning for `id` (challenge over, player left). */

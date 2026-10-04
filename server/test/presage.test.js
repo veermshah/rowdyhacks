@@ -2,7 +2,7 @@
 // mirrors the real one's events and payload shapes (no API key needed).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import jpeg from 'jpeg-js';
+import sharp from 'sharp';
 import { io as connect } from 'socket.io-client';
 import { FaceSignalAdapter } from '../src/presage.js';
 import { createApp, RIVERWALK_REWARD } from '../src/server.js';
@@ -71,14 +71,14 @@ function fakeSdkModule() {
     module: {
       sdk: {
         SmartSpectraSDK, faceMetrics: [11, 12, 13, 14],
-        FrameTransform: { kNone: 0 }, PixelFormat: { kRGBA: 2 }, SmartSpectraLogLevel: { kWarning: 2 },
+        FrameTransform: { kNone: 0 }, PixelFormat: { kRGB: 0, kRGBA: 2 }, SmartSpectraLogLevel: { kWarning: 2 },
       },
       messages: { decodeMetrics: (buf) => buf }, // fake "buffers" are already objects
     },
   };
 }
 
-const JPEG = Buffer.from(jpeg.encode({ width: 64, height: 48, data: Buffer.alloc(64 * 48 * 4, 128) }, 70).data);
+const JPEG = await sharp({ create: { width: 64, height: 48, channels: 3, background: '#808080' } }).jpeg({ quality: 70 }).toBuffer();
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
 async function startServer(opts) {
@@ -101,12 +101,13 @@ test('pipeline: frames reach Presage; Presage gestures clear the vault and pay o
     await client.emitWithAck('frame', { image: JPEG, t: 1000 });
     await wait(50);
     let snap;
-    for (let i = 1; i <= 5; i++) snap = await client.emitWithAck('frame', { image: JPEG, t: 1000 + i * 33 });
+    for (let i = 1; i <= 5; i++) { snap = await client.emitWithAck('frame', { image: JPEG, t: 1000 + i * 33 }); await wait(15); }
+    await wait(50); // decoding is async
     const sdk = fake.instances[0];
     assert.equal(sdk.opts.apiKey, 'test-key');
     assert.deepEqual(sdk.opts.requestedMetrics, [11, 12, 13, 14]);
     assert.ok(sdk.frames.length >= 4, 'frames forwarded to Presage');
-    assert.deepEqual({ w: sdk.frames[0].w, h: sdk.frames[0].h, stride: sdk.frames[0].stride, fmt: sdk.frames[0].fmt }, { w: 64, h: 48, stride: 256, fmt: 2 });
+    assert.deepEqual({ w: sdk.frames[0].w, h: sdk.frames[0].h, stride: sdk.frames[0].stride, fmt: sdk.frames[0].fmt }, { w: 64, h: 48, stride: 192, fmt: 0 }); // RGB from sharp
     assert.ok(sdk.frames.every((f, i, a) => i === 0 || f.ts > a[i - 1].ts), 'timestamps strictly increase');
     assert.equal(snap.sensor, 'running');
 
@@ -134,6 +135,24 @@ test('pipeline: frames reach Presage; Presage gestures clear the vault and pay o
     await wait(400);
     assert.equal(app.presage.owner, null);
     assert.ok(sdk.stopped && sdk.destroyed);
+  } finally {
+    client.disconnect();
+    await app.close();
+  }
+});
+
+test('pipeline: non-JPEG bytes are rejected and a slow server drops frames instead of lagging', async () => {
+  const fake = fakeSdkModule();
+  const { app, client } = await startServer({ sdkModule: fake.module, apiKey: 'k' });
+  try {
+    await client.emitWithAck('start_challenge');
+    await client.emitWithAck('frame', { image: JPEG, t: 1 });
+    await wait(50);
+    assert.equal(app.presage.sendJpeg(client.id, Buffer.from('not a jpeg'), 2), false);
+    const accepted = Array.from({ length: 10 }, (_, i) => app.presage.sendJpeg(client.id, JPEG, 10 + i));
+    assert.deepEqual(accepted, [true, true, true, false, false, false, false, false, false, false]);
+    await wait(100);
+    assert.equal(fake.instances[0].frames.length >= 3, true);
   } finally {
     client.disconnect();
     await app.close();
