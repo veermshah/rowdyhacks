@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { car } from '../car/state.js';
 import { game } from '../game/runtime.js';
-import { connectHeist, disconnectHeist, getHeist, openRiverwalk, openAlamo, useHeist } from '../game/heist.js';
+import { connectHeist, disconnectHeist, getHeist, openRiverwalk, resetHeistRun, useHeist } from '../game/heist.js';
 import {
   ALAMO_EXIT_RADIUS, ALAMO_POINT, ALAMO_TRIGGER_RADIUS, HEIST_DEV_TOOLS, MAX_WANTED_LEVEL,
   RIVERWALK_EXIT_RADIUS, RIVERWALK_POINT, RIVERWALK_TRIGGER_RADIUS,
@@ -33,31 +33,24 @@ function HeistHud({ cash, wantedLevel, connected }) {
 
 // Opens the Riverwalk popup when the car drives up to the checkpoint. It fires
 // once per visit: the car must leave the exit radius before it can trigger again.
+// Also starts a fresh heist whenever the game restarts (R / "restart" after being
+// caught), so the vault can be robbed again on the next run.
 function useRiverwalkTrigger() {
   useEffect(() => {
     let inside = false;
+    let epoch = game.epoch;
     const id = setInterval(() => {
+      if (game.epoch !== epoch) {
+        // epoch 0 -> 1 is the initial map load, not a restart.
+        if (epoch > 0) resetHeistRun();
+        epoch = game.epoch;
+        inside = false;
+      }
       const d = Math.hypot(car.x - RIVERWALK_POINT.x, car.z - RIVERWALK_POINT.z);
       const wasInside = inside;
       inside = d < (inside ? RIVERWALK_EXIT_RADIUS : RIVERWALK_TRIGGER_RADIUS);
       if (inside && !wasInside && game.started && !game.caught && !getHeist().riverwalkCleared) {
         openRiverwalk('arrived');
-      }
-    }, 200);
-    return () => clearInterval(id);
-  }, []);
-}
-
-// Same arrive/leave pattern as the Riverwalk, for Challenge 1 at the Alamo.
-function useAlamoTrigger() {
-  useEffect(() => {
-    let inside = false;
-    const id = setInterval(() => {
-      const d = Math.hypot(car.x - ALAMO_POINT.x, car.z - ALAMO_POINT.z);
-      const wasInside = inside;
-      inside = d < (inside ? ALAMO_EXIT_RADIUS : ALAMO_TRIGGER_RADIUS);
-      if (inside && !wasInside && game.started && !game.caught && !getHeist().alamoCleared) {
-        openAlamo('arrived');
       }
     }, 200);
     return () => clearInterval(id);
@@ -72,19 +65,14 @@ export default function HeistLayer({ videoRef }) {
     return disconnectHeist;
   }, []);
   useRiverwalkTrigger();
-  useAlamoTrigger();
 
   return (
     <>
       <HeistHud cash={heist.cash} wantedLevel={heist.wantedLevel} connected={heist.connected} />
-      {HEIST_DEV_TOOLS && !heist.riverwalkOpen && !heist.alamoOpen && (
-        <button className="heist-dev-open" onClick={() => openRiverwalk('dev')}>
-          DEV: Force Open Riverwalk Challenge
-        </button>
-      )}
-      {HEIST_DEV_TOOLS && !heist.alamoOpen && !heist.riverwalkOpen && (
-        <button className="heist-dev-open" style={{ top: 140 }} onClick={() => openAlamo('dev')}>
-          DEV: Force Open Alamo Challenge
+      {/* Testing shortcut: only in `npm run dev` (or VITE_HEIST_DEV_TOOLS=true), never for players. */}
+      {HEIST_DEV_TOOLS && !heist.riverwalkOpen && (
+        <button className="heist-dev-skip" onClick={() => openRiverwalk('dev')}>
+          DEV: Skip to Riverwalk Challenge
         </button>
       )}
       {heist.riverwalkOpen && <RiverwalkChallenge videoRef={videoRef} />}

@@ -1,45 +1,21 @@
-# Render Blueprint for the Loot Run backend. Connect this repo on Render with
-# "New > Blueprint" and it reads this file automatically - no manual field
-# entry needed, nothing here is required to deploy.
-#
-# Socket.IO is already the backend's transport (Flask-SocketIO); this just
-# deploys what's there. NFC_SECRET and PRESAGE_API_KEY are both genuinely
-# optional in server/app.py (os.environ.get(..., "")) - NFC_SECRET blank
-# just skips signing/verifying physical loot tags, PRESAGE_API_KEY only
-# flips a cosmetic /health flag and has no live code path. Deliberately left
-# out of this blueprint so Render doesn't prompt for them as required
-# secrets; add either one later in the dashboard if you want them.
+# Render Blueprint for the Riverwalk heist server (Node.js + Presage SmartSpectra).
+# Render dashboard -> New -> Blueprint -> pick this repo/branch.
 services:
   - type: web
-    name: lootrun-server
-    runtime: python
-    plan: free
+    name: lootrun-presage
+    runtime: docker
     rootDir: server
-    buildCommand: pip install -r requirements.txt && python download_assets.py
-    startCommand: gunicorn -k gthread -w 1 --threads 8 -b 0.0.0.0:$PORT app:app
-    # -w 1 only: game state (cars, sessions, alamo_challenges in app.py)
-    # lives in plain in-process dicts with no shared store. Multiple workers
-    # or instances would each run a disconnected copy of the game.
-    #
-    # gthread, not eventlet: gunicorn deprecated the eventlet worker in
-    # 25.0 and deleted it entirely in 26.0 ("Entry point ('gunicorn.workers',
-    # 'eventlet') not found" is that removal, not a misconfiguration -
-    # requirements.txt's unpinned gunicorn>=22.0 pulls whatever's newest).
-    # gthread is gunicorn's own built-in threaded worker, so Flask-SocketIO
-    # falls back to its "threading" async_mode (app.py's _pick_async_mode())
-    # - the same mode local `python app.py` dev already runs and tests pass
-    # under. --threads 8 caps concurrent long-lived WebSocket connections;
-    # raise it if you expect more than ~8 browsers/Pis connected at once.
+    dockerfilePath: ./Dockerfile
+    # Presage analyses ~30 frames/s on this machine's CPU. The free plan (0.1 CPU)
+    # cannot keep up; use at least "standard" (1 CPU) for real face scanning.
+    plan: free
+    healthCheckPath: /health
     envVars:
-      - key: PYTHON_VERSION
-        value: 3.12.7
-      # Comma-separated; drives both Flask-CORS and Socket.IO's own CORS
-      # check. Update to your real Vercel domain(s) before going live.
+      - key: PRESAGE_API_KEY
+        sync: false
+      # Your friend's Vercel URL(s), comma-separated, no trailing slash.
       - key: CORS_ORIGINS
-        value: https://your-app.vercel.app,http://localhost:5173
-      # Defaults to "1" (dev mode) in app.py if unset, which exposes
-      # admin/dev socket events (skip/reset/sim-input) to any client with no
-      # auth. Set to 0 for a public deploy; leave 1 only if you want those
-      # dev tools live (e.g. at a demo table).
+        sync: false
+      # 0 = dev Simulate buttons disabled on the server.
       - key: RIVERWALK_DEV_MODE
         value: "0"
