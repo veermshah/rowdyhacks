@@ -29,6 +29,7 @@ import PursuitHud from './ui/PursuitHud.jsx';
 import { buildRiverNetwork, riverObstacles } from './lib/riverNetwork.js';
 import { buildRoadGrid, queryNearestRoad } from './lib/grid.js';
 import HeistLayer from './heist/HeistLayer.jsx';
+import DrivingAudio from './audio/DrivingAudio.jsx';
 
 export default function App() {
   const videoRef = useRef(null);
@@ -161,6 +162,7 @@ export default function App() {
       {mapData && <Minimap roads={mapData.roads} />}
       {mapData && <Navigation />}
       <Hud />
+      <DrivingAudio />
       {started && <PursuitHud />}
       <DebugPanel />
       <HeistLayer videoRef={videoRef} />
