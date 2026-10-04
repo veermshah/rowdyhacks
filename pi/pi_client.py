@@ -79,12 +79,17 @@ def on_cmd(data):
     if cmd_type == "lcd":
         line1 = (data.get("line1") or "")[:16]
         line2 = (data.get("line2") or "")[:16]
+        displayed_line2 = "*" * len(line2) if line1.strip().upper() == "CODE:" else line2
+        log.info("LCD request: line1=%r line2=%r", line1, displayed_line2)
         link.send_command(f"LCD:{line1}|{line2}")
     elif cmd_type == "servo":
         angle = config.SERVO_OPEN_ANGLE if data.get("state") == "open" else config.SERVO_CLOSED_ANGLE
+        log.info("Servo request: state=%s angle=%d", data.get("state"), angle)
         link.send_command(f"SERVO:{angle}")
     elif cmd_type == "speak":
-        _speak(str(data.get("text") or "").strip())
+        text = str(data.get("text") or "").strip()
+        log.info("Repeat/audio request received; speaking keyword (%d characters)", len(text))
+        _speak(text)
     elif cmd_type in ("rgb", "led", "beep"):
         log.debug("Dropping %r cmd - no %s hardware wired on this shield", cmd_type, cmd_type)
     else:

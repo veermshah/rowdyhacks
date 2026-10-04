@@ -76,6 +76,14 @@ class SerialLink:
         the relay over.
         """
         self._ensure_open()
+        description = line.strip()
+        if description.upper().startswith("LCD:CODE:|"):
+            description = "LCD:CODE:|****"
+        elif description.upper().startswith("LCD:"):
+            description = "LCD request"
+        elif description.upper().startswith("SERVO:"):
+            description = f"Servo request ({description})"
+        log.info("Sending Arduino command: %s", description)
         try:
             self._ser.write((line.strip() + "\n").encode("ascii"))
         except serial.SerialException as exc:
