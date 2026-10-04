@@ -185,6 +185,24 @@ def test_keyword_is_spoken_once_revealed_but_never_sent_to_the_hacker():
         assert move.upper() not in repr(snap)
 
 
+def test_keyword_can_be_repeated_only_during_code_phase():
+    ch = new_challenge()
+    assert ch.repeat_keyword() is False
+    ch.start(0.0)
+    solve_sequence(ch, 0.0)
+    assert ch.repeat_keyword() is True
+    commands = ch.pop_cmds()
+    assert commands[-1] == {"type": "speak", "text": ch.correct_code}
+
+
+def test_keyword_repeat_does_not_reveal_keyword_in_a_snapshot():
+    ch = new_challenge()
+    solve_sequence(ch, 0.0)
+    ch.repeat_keyword()
+    snap = ch.snapshot(1.0, include_hacker=True)
+    assert ch.correct_code not in repr(snap)
+
+
 # --------------------------------------------------------------------------- #
 # No heat/hints: make sure nothing re-adds them silently
 # --------------------------------------------------------------------------- #
@@ -299,3 +317,29 @@ def test_socket_submit_code_and_admin_reveal():
     assert res["correct"] is True
     assert server.get_car("car-alamo3").alamo_cleared is True
     client.disconnect()
+
+
+def test_socket_repeat_keyword_sends_only_a_pi_command():
+    pi = server.socketio.test_client(server.app)
+    hacker = server.socketio.test_client(server.app)
+    pi.emit("join_car", {"carId": "car-alamo-repeat", "role": "pi"}, callback=True)
+    hacker.emit("join_car", {"carId": "car-alamo-repeat", "role": "hacker"}, callback=True)
+    hacker.emit("alamo_start", callback=True)
+    ch = server.get_alamo("car-alamo-repeat")
+    ch._enter_code(time.monotonic())
+    pi.get_received()
+    hacker.get_received()
+
+    result = hacker.emit("alamo_repeat_keyword", callback=True)
+    assert result == {"ok": True}
+    pi_messages = pi.get_received()
+    assert any(
+        message["name"] == "cmd"
+        and message["args"][0] == {"type": "speak", "text": ch.correct_code}
+        for message in pi_messages
+    )
+    assert repr({"type": "speak", "text": ch.correct_code}) not in repr(hacker.get_received())
+    assert hacker.emit("alamo_repeat_keyword", callback=True) == {"ok": True}
+
+    pi.disconnect()
+    hacker.disconnect()
