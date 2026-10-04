@@ -1,5 +1,5 @@
 /* Riverwalk heist UI. Palette follows the existing navigation card (index.css). */
-.heist-hud, .rw-modal {
+.heist-hud, .heist-dev-skip, .rw-modal {
   --h-panel: #0c1a28ee;
   --h-line: #76e9f333;
   --h-text: #e9faff;
@@ -22,6 +22,11 @@
 .heist-conn { width: 7px; height: 7px; border-radius: 50%; background: var(--h-danger); margin-left: auto; }
 .heist-conn.ok { background: var(--h-accent); }
 
+
+/* Dev-only testing shortcut; sits above the Calibrate start screen (z-index 100). */
+.heist-dev-skip { position: fixed; top: 104px; left: 18px; z-index: 110; padding: 8px 12px; border: 1px dashed var(--h-warn); border-radius: 8px; background: #2a1a05e6; color: var(--h-warn); font-size: 11px; font-weight: 700; letter-spacing: .5px; cursor: pointer; }
+.heist-dev-skip:hover { background: #3d2608; }
+.heist-dev-skip:focus-visible { outline: 2px solid var(--h-warn); outline-offset: 2px; }
 
 /* ---- Modal ---- */
 .rw-backdrop { position: fixed; inset: 0; z-index: 120; display: grid; place-items: center; padding: 16px; background: #030b18b8; backdrop-filter: blur(6px); overflow-y: auto; }

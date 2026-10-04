@@ -18,7 +18,7 @@ let state = {
   wantedLevel: 0,
   riverwalkCleared: false,
   riverwalkOpen: false,
-  openReason: null, // 'arrived'
+  openReason: null, // 'arrived' | 'dev'
   challenge: null,
   alarm: null,
   lastReward: null,

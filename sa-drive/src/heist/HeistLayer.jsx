@@ -3,7 +3,7 @@ import { car } from '../car/state.js';
 import { game } from '../game/runtime.js';
 import { connectHeist, disconnectHeist, getHeist, openRiverwalk, resetHeistRun, useHeist } from '../game/heist.js';
 import {
-  MAX_WANTED_LEVEL, RIVERWALK_EXIT_RADIUS, RIVERWALK_POINT, RIVERWALK_TRIGGER_RADIUS,
+  HEIST_DEV_TOOLS, MAX_WANTED_LEVEL, RIVERWALK_EXIT_RADIUS, RIVERWALK_POINT, RIVERWALK_TRIGGER_RADIUS,
 } from '../config/heistConfig.js';
 import RiverwalkChallenge from './RiverwalkChallenge.jsx';
 import './heist.css';
@@ -67,6 +67,12 @@ export default function HeistLayer({ videoRef }) {
   return (
     <>
       <HeistHud cash={heist.cash} wantedLevel={heist.wantedLevel} connected={heist.connected} />
+      {/* Testing shortcut: only in `npm run dev` (or VITE_HEIST_DEV_TOOLS=true), never for players. */}
+      {HEIST_DEV_TOOLS && !heist.riverwalkOpen && (
+        <button className="heist-dev-skip" onClick={() => openRiverwalk('dev')}>
+          DEV: Skip to Riverwalk Challenge
+        </button>
+      )}
       {heist.riverwalkOpen && <RiverwalkChallenge videoRef={videoRef} />}
     </>
   );
