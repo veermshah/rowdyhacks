@@ -615,13 +615,12 @@ def _apply_alamo_events(car_id, events, ch):
     """Side effects of Alamo events on the shared car (both players see them).
     Takes the already-looked-up `ch` rather than calling get_alamo() again here -
     that would try to re-acquire state_lock while the "done" branch below is
-    still holding it, which deadlocks (threading.Lock isn't reentrant)."""
+    still holding it, which deadlocks (threading.Lock isn't reentrant).
+
+    Alamo mistakes (wrong move/spotted/wrong code) deliberately do NOT raise
+    the car's wanted_level - the Alamo challenge has no heat/difficulty tie-in
+    by design, unlike Riverwalk's alarm."""
     car = get_car(car_id)
-    heat_events = ("wrong", "spotted", "wrong_code", "hint")
-    if any(e in events for e in heat_events):
-        with state_lock:
-            car.wanted_level = min(MAX_WANTED_LEVEL, car.wanted_level + 1)
-        broadcast_car(car_id)
     if "done" in events:
         with state_lock:
             first = not car.alamo_cleared
@@ -788,17 +787,6 @@ def on_alamo_submit_code(data):
     return {"ok": True, "correct": correct}
 
 
-@socketio.on("alamo_request_hint")
-def on_alamo_request_hint(*_):
-    """Hacker's "Request hint" button: unlock the next hint immediately, +1 heat."""
-    s = _session()
-    ch = get_alamo(s.car_id)
-    events = ch.request_hint(time.monotonic())
-    _apply_alamo_events(s.car_id, events, ch)
-    _flush_alamo(s.car_id, ch)
-    return {"ok": True}
-
-
 @socketio.on("alamo_admin_skip")
 def on_alamo_admin_skip(*_):
     """Dev: jump straight to ALAMO_DONE."""
@@ -832,7 +820,7 @@ def on_alamo_admin_show_sequence(data):
     s = _session()
     ch = get_alamo(s.car_id)
     show = bool((data or {}).get("show"))
-    sequence = ch.sequences[ch.round] if show and ch.active and ch.sequences else None
+    sequence = ch.sequence if show and ch.active and ch.sequence else None
     return {"ok": True, "sequence": sequence}
 
 

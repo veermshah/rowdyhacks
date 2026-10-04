@@ -9,17 +9,18 @@ Servo servo;
 const int LIGHT_PIN = A0;
 const int JOY_X_PIN = A1;
 const int JOY_Y_PIN = A2;
-const int JOY_BUTTON_PIN = 2;
+const int JOY_BUTTON_PIN = 2;  // wired but unused - the game only reads the joystick axes
 const int SERVO_PIN = 9;
 
+const int SERVO_CLOSED_ANGLE = 90;
+
 bool lcdWorking = false;
-int servoAngle = 90;
+int servoAngle = SERVO_CLOSED_ANGLE;
 unsigned long lastUpdate = 0;
 
-// Set once the Raspberry Pi sends a real LCD/SERVO command, so this sketch
-// still behaves exactly like the original wiring test until then.
+// Set once the Raspberry Pi sends a real LCD command, so the screen shows
+// the live sensor readout (handy for a standalone wiring check) until then.
 bool lcdOverrideActive = false;
-bool servoLocked = false;
 
 // --- Incoming commands from the Raspberry Pi, over the same Serial link ---
 // Newline-terminated, tag-prefixed lines:
@@ -51,10 +52,8 @@ void applyCommand(const String &line) {
       lcd.print(line2);
     }
   } else if (tag == "SERVO") {
-    int angle = payload.toInt();
-    servoAngle = constrain(angle, 0, 180);
+    servoAngle = constrain(payload.toInt(), 0, 180);
     servo.write(servoAngle);
-    servoLocked = true;
   }
   // else: unrecognized tag, ignored.
 }
@@ -77,7 +76,6 @@ void setup() {
   Serial.begin(9600);
 
   pinMode(JOY_BUTTON_PIN, INPUT_PULLUP);
-  pinMode(LED_BUILTIN, OUTPUT);
 
   int lcdStatus = lcd.begin(16, 2);
   lcdWorking = (lcdStatus == 0);
@@ -91,11 +89,11 @@ void setup() {
     Serial.println(lcdStatus);
   }
 
+  // The vault stays closed until the server sends SERVO:<angle> on ALAMO_DONE.
   servo.attach(SERVO_PIN);
-  servo.write(90);
+  servo.write(servoAngle);
 
-  Serial.println("Move joystick X to move servo.");
-  Serial.println("Press joystick to light built-in LED.");
+  Serial.println("Alamo vault ready. Waiting for the Pi relay...");
 }
 
 void loop() {
@@ -110,26 +108,6 @@ void loop() {
   int y = analogRead(JOY_Y_PIN);
   int light = analogRead(LIGHT_PIN);
   bool pressed = digitalRead(JOY_BUTTON_PIN) == LOW;
-
-  // Once the Pi has sent an explicit SERVO command (vault door open/close),
-  // that wins and the joystick stops nudging the servo.
-  if (!servoLocked) {
-    // Use 10-170 degrees to avoid forcing the servo's end stops.
-    int targetAngle = map(x, 0, 1023, 10, 170);
-
-    // Hold the servo at center when the joystick is near center.
-    if (x > 460 && x < 565) {
-      targetAngle = 90;
-    }
-
-    // Ignore tiny changes to reduce jitter.
-    if (abs(targetAngle - servoAngle) >= 3) {
-      servoAngle = targetAngle;
-      servo.write(servoAngle);
-    }
-  }
-
-  digitalWrite(LED_BUILTIN, pressed ? HIGH : LOW);
 
   Serial.print("X: ");
   Serial.print(x);
@@ -156,12 +134,7 @@ void loop() {
     lcd.setCursor(0, 1);
     lcd.print("                ");
     lcd.setCursor(0, 1);
-    lcd.print("L:");
+    lcd.print("Light:");
     lcd.print(light);
-    lcd.print(" S:");
-    lcd.print(servoAngle);
-    if (pressed) {
-      lcd.print(" BTN");
-    }
   }
 }
