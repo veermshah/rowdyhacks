@@ -34,6 +34,15 @@ export const ALAMO_POINT = toLocal(LANDMARKS.alamo.lat, LANDMARKS.alamo.lon);
 export const ALAMO_TRIGGER_RADIUS = 95;
 export const ALAMO_EXIT_RADIUS = 120;
 
+// Tower of the Americas checkpoint (Challenge 3, "The Callback"): same arrive/
+// leave pattern. The crew phones the bank (an ElevenLabs voice agent) and keys
+// the one-time code the vault shows into its joystick; this dashboard is the
+// hacker's view. The nearest drivable road is ~72m from the landmark
+// (`node scripts/validate-gameplay.mjs`), so like the Alamo it needs a wide radius.
+export const TOWER_POINT = toLocal(LANDMARKS.towerOfAmericas.lat, LANDMARKS.towerOfAmericas.lon);
+export const TOWER_TRIGGER_RADIUS = 90;
+export const TOWER_EXIT_RADIUS = 115;
+
 export const MAX_WANTED_LEVEL = 5;
 // Each wanted star makes the police cruiser this much faster (5 stars = +25%).
 export const WANTED_POLICE_SPEED_BONUS = 0.05;

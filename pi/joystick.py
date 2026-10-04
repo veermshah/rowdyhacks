@@ -1,6 +1,6 @@
 """Analog joystick -> one discrete move per gesture.
 
-The server's handle_input() (server/alamo_challenge.py) expects an already-
+The servers' handle_input() (server/alamo_challenge.py, server/tower_challenge.py) expect an already-
 discrete "up"/"down"/"left"/"right" string per move, not raw analog values.
 The axis and polarity options are configurable so the physical mounting can
 be corrected without reflashing the Arduino.

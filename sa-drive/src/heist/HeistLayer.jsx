@@ -1,13 +1,15 @@
 import { useEffect } from 'react';
 import { car } from '../car/state.js';
 import { game } from '../game/runtime.js';
-import { connectHeist, disconnectHeist, getHeist, openRiverwalk, openAlamo, resetHeistRun, useHeist } from '../game/heist.js';
+import { connectHeist, disconnectHeist, getHeist, openRiverwalk, openAlamo, openTower, resetHeistRun, useHeist } from '../game/heist.js';
 import {
   ALAMO_EXIT_RADIUS, ALAMO_POINT, ALAMO_TRIGGER_RADIUS, HEIST_DEV_TOOLS, MAX_WANTED_LEVEL,
   RIVERWALK_EXIT_RADIUS, RIVERWALK_POINT, RIVERWALK_TRIGGER_RADIUS,
+  TOWER_EXIT_RADIUS, TOWER_POINT, TOWER_TRIGGER_RADIUS,
 } from '../config/heistConfig.js';
 import RiverwalkChallenge from './RiverwalkChallenge.jsx';
 import AlamoChallenge from './AlamoChallenge.jsx';
+import TowerChallenge from './TowerChallenge.jsx';
 import './heist.css';
 
 const money = (n) => `$${(n || 0).toLocaleString()}`;
@@ -73,6 +75,22 @@ function useAlamoTrigger() {
   }, []);
 }
 
+// Same arrive/leave pattern again, for Challenge 3 at the Tower of the Americas.
+function useTowerTrigger() {
+  useEffect(() => {
+    let inside = false;
+    const id = setInterval(() => {
+      const d = Math.hypot(car.x - TOWER_POINT.x, car.z - TOWER_POINT.z);
+      const wasInside = inside;
+      inside = d < (inside ? TOWER_EXIT_RADIUS : TOWER_TRIGGER_RADIUS);
+      if (inside && !wasInside && game.started && !game.caught && !getHeist().towerCleared) {
+        openTower('arrived');
+      }
+    }, 200);
+    return () => clearInterval(id);
+  }, []);
+}
+
 export default function HeistLayer({ videoRef }) {
   const heist = useHeist();
 
@@ -82,23 +100,30 @@ export default function HeistLayer({ videoRef }) {
   }, []);
   useRiverwalkTrigger();
   useAlamoTrigger();
+  useTowerTrigger();
 
   return (
     <>
       <HeistHud cash={heist.cash} wantedLevel={heist.wantedLevel} connected={heist.connected} />
       {/* Testing shortcuts: only in `npm run dev` (or VITE_HEIST_DEV_TOOLS=true), never for players. */}
-      {HEIST_DEV_TOOLS && !heist.riverwalkOpen && !heist.alamoOpen && (
+      {HEIST_DEV_TOOLS && !heist.riverwalkOpen && !heist.alamoOpen && !heist.towerOpen && (
         <button className="heist-dev-skip" onClick={() => openRiverwalk('dev')}>
           DEV: Skip to Riverwalk Challenge
         </button>
       )}
-      {HEIST_DEV_TOOLS && !heist.alamoOpen && !heist.riverwalkOpen && (
+      {HEIST_DEV_TOOLS && !heist.alamoOpen && !heist.riverwalkOpen && !heist.towerOpen && (
         <button className="heist-dev-skip" style={{ top: 140 }} onClick={() => openAlamo('dev')}>
           DEV: Skip to Alamo Challenge
         </button>
       )}
+      {HEIST_DEV_TOOLS && !heist.towerOpen && !heist.riverwalkOpen && !heist.alamoOpen && (
+        <button className="heist-dev-skip" style={{ top: 176 }} onClick={() => openTower('dev')}>
+          DEV: Skip to Tower Challenge
+        </button>
+      )}
       {heist.riverwalkOpen && <RiverwalkChallenge videoRef={videoRef} />}
       {heist.alamoOpen && <AlamoChallenge />}
+      {heist.towerOpen && <TowerChallenge />}
     </>
   );
 }

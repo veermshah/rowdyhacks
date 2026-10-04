@@ -172,10 +172,39 @@
 .al-dev-light input { flex: 1; }
 .al-reveal-text { font-family: ui-monospace, monospace; }
 
+/* ---- Tower vault (Challenge 3) ---- */
+.tw-phone { padding: 14px 16px; border-radius: 10px; background: #07101c; border: 1px solid var(--h-line); }
+.tw-phone.done { border-color: #2fd5a0aa; }
+.tw-phone.alarm { border-color: var(--h-danger); animation: rw-strobe 1.2s infinite; }
+.tw-phone-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; font-size: 11px; letter-spacing: 2px; color: var(--h-muted); }
+.tw-phone-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--h-accent); box-shadow: 0 0 8px var(--h-accent); }
+.tw-phone.alarm .tw-phone-dot { background: var(--h-danger); box-shadow: 0 0 8px var(--h-danger); }
+.tw-step-text { margin: 0 0 12px; font-size: 14px; line-height: 1.5; color: var(--h-text); }
+.tw-otp-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px; }
+.tw-otp-status { font-size: 11px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--h-muted); }
+.tw-otp-status.sent { color: var(--h-warn); }
+.tw-otp-status.verified { color: var(--h-accent); }
+.tw-otp-status.expired, .tw-otp-status.burned { color: #ff8095; }
+.tw-otp-time { font-size: 22px; font-variant-numeric: tabular-nums; font-family: ui-monospace, monospace; color: var(--h-warn); }
+.tw-otp-bar, .tw-suspicion-bar { height: 8px; margin-bottom: 12px; border-radius: 5px; background: #ffffff1a; overflow: hidden; }
+.tw-otp-bar div { height: 100%; background: var(--h-warn); transition: width 1s linear; }
+.tw-suspicion-bar { margin-bottom: 8px; }
+.tw-suspicion-bar div { height: 100%; background: var(--h-cash); transition: width .3s; }
+.tw-suspicion-bar div.hot { background: var(--h-danger); }
+.tw-suspicion { padding: 10px 12px; border-radius: 8px; background: #07101c; border: 1px solid var(--h-line); }
+.tw-entry.idle .al-code-box { opacity: .4; }
+.al-code-box.tw-cursor { border-color: var(--h-warn); box-shadow: 0 0 0 2px #ffb34744; }
+.tw-alarm-banner { padding: 14px; border-radius: 10px; background: #4a0010d9; text-align: center; }
+.tw-alarm-banner strong { font-size: clamp(20px, 4vw, 28px); letter-spacing: 3px; color: #ff8095; }
+.tw-dev-sub { margin-top: 12px; }
+.tw-dev-fields { display: flex; flex-direction: column; gap: 4px; margin-bottom: 6px; }
+.tw-dev-fields input { padding: 6px 8px; border: 1px solid #ffb34755; border-radius: 6px; background: #1a1105; color: #ffd9a8; font-size: 11px; }
+
 @keyframes heist-flash { from { filter: brightness(2.2); transform: scale(1.15); } }
 @keyframes rw-strobe { 50% { background: #7a0018d9; } }
 @keyframes al-shake { 20%, 60% { transform: translateX(-6px); } 40%, 80% { transform: translateX(6px); } }
 @media (prefers-reduced-motion: reduce) {
   .heist-cash, .heist-stars, .rw-alarm { animation: none; }
   .al-code-boxes.shake { animation: none; }
+  .tw-phone.alarm { animation: none; }
 }
