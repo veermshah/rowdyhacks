@@ -22,6 +22,8 @@ const MAX_PENDING_FRAMES = 3; // CPU falling behind: drop frames instead of buil
 const MAX_FRAME_GAP_US = 1_000_000;
 const NOMINAL_FRAME_US = 33_333;
 const REJECT_STREAK_RESTART = 30; // this many rejected frames in a row -> fresh session
+const QUICK_FAILURE_MS = 10_000;  // a session dying sooner than this counts as a quick failure
+const MAX_QUICK_FAILURES = 3;     // ...and this many in a row triggers a back-off
 
 export const GESTURES = {
   NOD_DELTA: 0.07,          // nose leaves its resting height by this many face-heights...
@@ -183,6 +185,8 @@ export class PresageSession {
     this.teardown = Promise.resolve();
     this.starting = null;
     this.retryAfter = 0;
+    this.sessionStartedAt = 0;
+    this.quickFailures = 0;
   }
 
   get available() {
@@ -231,6 +235,7 @@ export class PresageSession {
       });
       sdk.on('metrics', (buf) => {
         this.stats.metricsPackets += 1;
+        this.quickFailures = 0;
         if (this.owner !== id) return;
         let metrics;
         try {
@@ -263,14 +268,25 @@ export class PresageSession {
         if (this.owner !== id) return;
         this.log.warn(`[presage] error ${code}: ${message} (retryable=${retryable})`);
         this.#setError(code, message);
-        // Timestamp hiccups (tab was hidden, network stall): rebuild on the next frame.
-        if (code === 10 || code === 11 || retryable) this.#restartSoon(id);
-        else {
+        // Timestamp hiccups or a retryable failure: rebuild on the next frame. But a
+        // session that keeps dying within seconds (e.g. a model can't load) must not
+        // restart-loop against Presage's servers: back off after a few in a row.
+        if (code === 10 || code === 11 || retryable) {
+          const quick = Date.now() - this.sessionStartedAt < QUICK_FAILURE_MS;
+          this.quickFailures = quick ? this.quickFailures + 1 : 0;
+          this.#restartSoon(id);
+          if (this.quickFailures >= MAX_QUICK_FAILURES) {
+            this.retryAfter = Date.now() + 15_000;
+            this.quickFailures = 0;
+            this.log.warn('[presage] sessions keep failing right after start; backing off 15 s');
+          }
+        } else {
           this.release(id);
           this.retryAfter = Date.now() + 10_000;
         }
       });
       sdk.useCustomInput(FrameTransform.kNone);
+      this.sessionStartedAt = Date.now();
       sdk.start(); // authenticates with Presage; throws on a bad key
       this.sdk = sdk;
       if (this.state === 'starting') this.state = 'running';

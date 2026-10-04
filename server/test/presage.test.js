@@ -199,6 +199,26 @@ test('pipeline: Presage stuck rejecting frames -> session restarts by itself', a
   }
 });
 
+test('pipeline: sessions failing right after start back off instead of restart-looping', async () => {
+  const fake = fakeSdkModule();
+  const { app, client } = await startServer({ sdkModule: fake.module, apiKey: 'k' });
+  try {
+    await client.emitWithAck('start_challenge');
+    for (let round = 0; round < 6; round++) {
+      await client.emitWithAck('frame', { image: JPEG });
+      await wait(30);
+      // like the Vulkan failure on Render: retryable "processing failed" seconds after start
+      fake.instances.at(-1).emit('error', 8, 'SmartSpectra processing failed.', true);
+      await wait(30);
+    }
+    assert.equal(fake.instances.length, 3, 'three quick failures, then back-off');
+    assert.ok(app.presage.retryAfter > Date.now() + 10_000);
+  } finally {
+    client.disconnect();
+    await app.close();
+  }
+});
+
 test('pipeline: bad API key surfaces an error and does not hammer Presage', async () => {
   const fake = fakeSdkModule();
   const { app, client } = await startServer({ sdkModule: fake.module, apiKey: 'bad' });
