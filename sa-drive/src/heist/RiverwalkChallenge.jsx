@@ -211,7 +211,7 @@ export default function RiverwalkChallenge({ videoRef: sharedVideoRef }) {
       <div className="rw-modal" role="dialog" aria-modal="true" aria-labelledby="rw-title" onKeyDown={(e) => e.key !== 'Escape' && e.stopPropagation()}>
         <header className="rw-head">
           <div>
-            <div className="rw-eyebrow">CHALLENGE 2 · RIVERWALK SECURITY CHECKPOINT</div>
+            <div className="rw-eyebrow">CASE FILE 02 · RIVERWALK SECURITY CHECKPOINT</div>
             <h2 id="rw-title">Face the Vault</h2>
           </div>
           <button ref={closeRef} className="rw-close" onClick={closeRiverwalk} aria-label="Close challenge">✕</button>

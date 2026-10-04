@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef } from 'react';
+import NoirCity from './NoirCity.jsx';
 import { input } from '../input/input.js';
 import { initHandTracker, startTracking, startCalibration, getCalibrationProgress, isCalibrating } from '../input/HandTracker.js';
 
@@ -77,85 +78,29 @@ export default function Calibrate({ videoRef, onReady }) {
 
   if (state === STATES.READY || state === STATES.KEYBOARD) return null;
 
-  const overlay = {
-    position: 'fixed',
-    inset: 0,
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    justifyContent: 'center',
-    background: 'rgba(0,0,0,0.85)',
-    color: '#fff',
-    fontFamily: 'system-ui, sans-serif',
-    zIndex: 100,
-    gap: 16,
-  };
-
-  const btn = {
-    padding: '12px 28px',
-    fontSize: 18,
-    borderRadius: 8,
-    border: 'none',
-    cursor: 'pointer',
-    fontWeight: 600,
-  };
-
   return (
-    <div style={overlay}>
-      <h1 style={{ fontSize: 42, marginBottom: 8 }}>Hack Stash</h1>
-      <p style={{ color: '#aaa', fontSize: 16, marginBottom: 24 }}>
-        Follow the glowing road route. Stay ahead of the police.
-      </p>
-
-      <p style={{fontSize:12,color:'#a9c4d6'}}>Turn your hands like a wheel. Open both hands to reverse. One open + one fist to look behind.</p>
-      {state === STATES.INIT && (
-        <>
-          <button style={{ ...btn, background: '#3b82f6', color: '#fff' }} onClick={startHands}>
-            Use Hand Steering
-          </button>
-          <button style={{ ...btn, background: '#444', color: '#ccc' }} onClick={useKeyboard}>
-            Use Keyboard (WASD)
-          </button>
-        </>
-      )}
-
-      {state === STATES.WAITING_CAMERA && (
-        <p style={{ fontSize: 20 }}>Requesting camera access...</p>
-      )}
-
-      {state === STATES.LOADING_MODEL && (
-        <p style={{ fontSize: 20 }}>Loading hand tracking model...</p>
-      )}
-
-      {state === STATES.CALIBRATING && (
-        <>
-          <p style={{ fontSize: 22, maxWidth: 500, textAlign: 'center', lineHeight: 1.5 }}>
-            Hold your hands naturally like a steering wheel
-          </p>
-          <div style={{
-            width: 300, height: 12, background: '#333', borderRadius: 6, overflow: 'hidden',
-          }}>
-            <div style={{
-              width: `${progress * 100}%`, height: '100%', background: '#3b82f6',
-              transition: 'width 0.1s',
-            }} />
+    <main className="noir-home">
+      <header className="noir-masthead"><span className="noir-monogram">HS</span><span>HACK STASH <i>/</i> SAN ANTONIO</span><span className="noir-edition">A getaway after dark.</span></header>
+      <div className="noir-home-grid">
+        <section className="noir-intro" aria-label="Start your getaway">
+          <p className="noir-kicker">THE CITY SLEEPS. YOU DON'T.</p>
+          <h1 aria-label="Hack Stash">HACK<br/><span>STASH.</span></h1>
+          <p className="noir-deck">Three vaults. One getaway car.<br/>Give the police something to chase.</p>
+          <div className="noir-start">
+            {state === STATES.INIT && <>
+              <p className="noir-section-label">CHOOSE YOUR CONTROLS</p>
+              <button className="noir-start-button" onClick={startHands}><span>01</span><strong>Use Hand Steering</strong><b aria-hidden="true">&#8599;</b></button>
+              <button className="noir-start-button secondary" onClick={useKeyboard}><span>02</span><strong>Use Keyboard (WASD)</strong><b aria-hidden="true">&#8599;</b></button>
+              <p className="noir-camera-note">Hand steering uses your camera. Keyboard needs no setup.</p>
+            </>}
+            {(state === STATES.WAITING_CAMERA || state === STATES.LOADING_MODEL) && <div className="noir-setup" role="status"><span className="noir-section-label">PREPARING THE GETAWAY</span><p>{state === STATES.WAITING_CAMERA ? 'Allow camera access to use hand steering.' : 'Loading hand tracking...'}</p></div>}
+            {state === STATES.CALIBRATING && <div className="noir-setup" role="status"><span className="noir-section-label">CHECK YOUR GRIP</span><p>Hold your hands naturally like a steering wheel.</p><div className="noir-progress" role="progressbar" aria-label="Hand calibration" aria-valuenow={Math.round(progress*100)} aria-valuemin={0} aria-valuemax={100}><span style={{width:`${progress*100}%`}}/></div><small>{Math.round(progress*100)}% &mdash; keep hands steady</small></div>}
+            {state === STATES.FAILED && <div className="noir-setup"><p role="alert">Hand tracking failed: {error}</p><button className="noir-start-button" onClick={useKeyboard}>Continue with Keyboard <b aria-hidden="true">&#8599;</b></button></div>}
           </div>
-          <p style={{ color: '#888', fontSize: 14 }}>
-            {(progress * 100).toFixed(0)}% — keep hands steady
-          </p>
-        </>
-      )}
-
-      {state === STATES.FAILED && (
-        <>
-          <p style={{ color: '#f66', fontSize: 18 }}>
-            Hand tracking failed: {error}
-          </p>
-          <button style={{ ...btn, background: '#444', color: '#ccc' }} onClick={useKeyboard}>
-            Continue with Keyboard
-          </button>
-        </>
-      )}
-    </div>
+        </section>
+        <figure className="noir-art"><NoirCity/><figcaption><span>01 / THE GETAWAY</span><span>Downtown, San Antonio.</span></figcaption></figure>
+      </div>
+      <footer className="noir-home-footer"><div><span>BEHIND THE WHEEL</span><p>W / S &middot; accelerate / brake &nbsp; A / D &middot; steer &nbsp; X &middot; reverse</p></div><div><span>KEEP YOUR HANDS VISIBLE</span><p>Both open &middot; reverse &nbsp; Open + fist &middot; look behind</p></div><strong>STAY ONE TURN AHEAD.</strong></footer>
+    </main>
   );
 }

@@ -150,7 +150,7 @@ export default function AlamoChallenge() {
       >
         <header className="rw-head">
           <div>
-            <div className="rw-eyebrow">CHALLENGE 1 &middot; THE ALAMO</div>
+            <div className="rw-eyebrow">CASE FILE 01 &middot; THE ALAMO</div>
             <h2 id="al-title">Crack the Vault</h2>
           </div>
           <button ref={closeRef} className="rw-close" onClick={closeAlamo} aria-label="Close challenge">&times;</button>

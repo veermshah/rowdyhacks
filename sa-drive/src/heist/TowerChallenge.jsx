@@ -148,7 +148,7 @@ export default function TowerChallenge() {
       >
         <header className="rw-head">
           <div>
-            <div className="rw-eyebrow">CHALLENGE 3 &middot; TOWER OF THE AMERICAS</div>
+            <div className="rw-eyebrow">CASE FILE 03 &middot; TOWER OF THE AMERICAS</div>
             <h2 id="tw-title">The Callback</h2>
           </div>
           <button ref={closeRef} className="rw-close" onClick={closeTower} aria-label="Close challenge">&times;</button>
