@@ -47,6 +47,6 @@ LIGHT_MIN_SEND_DELTA = _int("ALAMO_LIGHT_DELTA", 4)
 
 # Degrees the servo moves to when the server sends {"type": "servo", "state": "open"}.
 SERVO_OPEN_ANGLE = _int("ALAMO_SERVO_OPEN_ANGLE", 170)
-SERVO_CLOSED_ANGLE = _int("ALAMO_SERVO_CLOSED_ANGLE", 90)
+SERVO_CLOSED_ANGLE = _int("ALAMO_SERVO_CLOSED_ANGLE", 10)
 
 RECONNECT_DELAY_S = 2.0
