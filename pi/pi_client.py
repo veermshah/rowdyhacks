@@ -1,8 +1,9 @@
-"""Raspberry Pi hardware relay for the Alamo vault challenge.
+"""Raspberry Pi hardware relay for the vault rig (Alamo + Tower challenges).
 
 Runs on the Pi, reads the Arduino Uno over USB serial, and speaks the fixed
 Pi wire protocol described in server/alamo_challenge.py:
-  - emits Socket.IO `input` events: {"device": "joystick"|"light", "value": ...}
+  - emits Socket.IO `input` events: {"device": "joystick"|"light"|"button", "value": ...}
+    (the joystick button is emitted once per press, for the Tower's code submit)
   - receives Socket.IO `cmd` events: {"type": "lcd"|"rgb"|"led"|"beep"|"servo", ...}
     and relays the ones we have hardware for (lcd, servo) to the Arduino
     over the same serial link. rgb/led/beep have no wired actuator on this
@@ -29,6 +30,7 @@ link = SerialLink(config.SERIAL_PORT, config.BAUD_RATE, config.RECONNECT_DELAY_S
 joystick = JoystickClassifier(config.JOYSTICK_CENTER_LOW, config.JOYSTICK_CENTER_HIGH)
 
 _last_sent_light = None
+_last_button = False
 
 
 @sio.event
@@ -63,7 +65,7 @@ def _serial_loop():
     """Runs forever on a background thread: blocks on serial reads, converts
     readings to the Pi wire protocol, and emits them over Socket.IO.
     """
-    global _last_sent_light
+    global _last_sent_light, _last_button
     while True:
         reading = link.read_reading()
         if reading is None:
@@ -72,6 +74,12 @@ def _serial_loop():
         move = joystick.classify(reading["x"], reading["y"])
         if move is not None and sio.connected:
             sio.emit("input", {"device": "joystick", "value": move})
+
+        # Press edge only (not every ~150ms reading while held): one submit per press.
+        pressed = reading["button"]
+        if pressed and not _last_button and sio.connected:
+            sio.emit("input", {"device": "button", "value": True})
+        _last_button = pressed
 
         light = reading["light"]
         if sio.connected and (

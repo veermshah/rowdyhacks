@@ -9,7 +9,7 @@ Servo servo;
 const int LIGHT_PIN = A0;
 const int JOY_X_PIN = A1;
 const int JOY_Y_PIN = A2;
-const int JOY_BUTTON_PIN = 2;  // wired but unused - the game only reads the joystick axes
+const int JOY_BUTTON_PIN = 2;  // the joystick button: reported on the serial line, and the Tower challenge uses it to submit the code
 const int SERVO_PIN = 9;
 
 const int SERVO_CLOSED_ANGLE = 90;
