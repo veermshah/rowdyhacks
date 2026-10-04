@@ -882,6 +882,18 @@ def on_alamo_start(*_):
     return {"ok": True}
 
 
+@socketio.on("vault_close")
+def on_vault_close(*_):
+    """Return the shared physical vault lock to its closed position."""
+    s = _session()
+    socketio.emit(
+        "cmd",
+        {"type": "servo", "state": "closed"},
+        to=f"car:{s.car_id}:pi",
+    )
+    return {"ok": True}
+
+
 @socketio.on("alamo_submit_code")
 def on_alamo_submit_code(data):
     """Hacker's keyword entry (NOT the Pi protocol - the keyword is spoken by

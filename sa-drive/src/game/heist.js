@@ -222,6 +222,7 @@ export function openAlamo(reason) {
 }
 
 export function closeAlamo() {
+  socket?.emit('vault_close');
   set({ alamoOpen: false });
 }
 
@@ -283,6 +284,7 @@ export function openTower(reason) {
 }
 
 export function closeTower() {
+  socket?.emit('vault_close');
   set({ towerOpen: false });
 }
 
