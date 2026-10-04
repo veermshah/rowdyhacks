@@ -48,6 +48,8 @@ Edit `.env`:
 - `ALAMO_JOY_INVERT_X` / `ALAMO_JOY_INVERT_Y` - set `true` when that axis
   moves in the opposite direction from the expected direction.
 - `ALAMO_TTS_COMMAND` - installed speech executable, normally `espeak-ng`.
+- `ALAMO_TTS_AUDIO_SINK` - optional PipeWire/PulseAudio sink name; leave blank
+  to use the configured default sink.
 - `ALAMO_TTS_LEAD_IN_S` - silent lead-in before speech to let Bluetooth
   speakers wake up (default `0.6` seconds).
 
@@ -88,6 +90,17 @@ transport.
 sudo cp alamo-pi.service /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable --now alamo-pi
+```
+
+The relay uses the `dhivyesh123` PipeWire/PulseAudio session for Bluetooth
+speech. Enable that user's audio session to remain available when the relay
+starts at boot:
+
+```sh
+sudo loginctl enable-linger dhivyesh123
+systemctl --user enable --now pipewire pipewire-pulse wireplumber
+sudo systemctl daemon-reload
+sudo systemctl restart alamo-pi
 ```
 
 The included unit is configured for this Pi user (`dhivyesh123`) and uses the

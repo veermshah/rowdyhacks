@@ -34,10 +34,12 @@ if SOCKETIO_TRANSPORT not in ("polling", "websocket"):
 JOYSTICK_CENTER_LOW = _int("ALAMO_JOY_CENTER_LOW", 460)
 JOYSTICK_CENTER_HIGH = _int("ALAMO_JOY_CENTER_HIGH", 565)
 JOYSTICK_SWAP_AXES = _bool("ALAMO_JOY_SWAP_AXES")
-JOYSTICK_INVERT_X = _bool("ALAMO_JOY_INVERT_X")
-JOYSTICK_INVERT_Y = _bool("ALAMO_JOY_INVERT_Y")
+JOYSTICK_INVERT_X = _bool("ALAMO_JOY_INVERT_X", True)
+# This joystick's Y axis is electrically reversed: physical down reads as up.
+JOYSTICK_INVERT_Y = _bool("ALAMO_JOY_INVERT_Y", True)
 TTS_COMMAND = os.getenv("ALAMO_TTS_COMMAND", "espeak-ng").strip()
 TTS_LEAD_IN_S = float(os.getenv("ALAMO_TTS_LEAD_IN_S", "0.6"))
+TTS_AUDIO_SINK = os.getenv("ALAMO_TTS_AUDIO_SINK", "").strip()
 
 # Only re-emit the light reading once it moves by at least this much, so a
 # noisy ADC doesn't flood the socket every ~150ms.

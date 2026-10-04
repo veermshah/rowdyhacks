@@ -343,3 +343,16 @@ def test_socket_repeat_keyword_sends_only_a_pi_command():
 
     pi.disconnect()
     hacker.disconnect()
+
+
+def test_closing_the_vault_sends_the_servo_to_closed_position():
+    pi = server.socketio.test_client(server.app)
+    hacker = server.socketio.test_client(server.app)
+    pi.emit("join_car", {"carId": "car-close", "role": "pi"}, callback=True)
+    hacker.emit("join_car", {"carId": "car-close", "role": "hacker"}, callback=True)
+    pi.get_received()
+    result = hacker.emit("vault_close", callback=True)
+    assert result == {"ok": True}
+    assert {"name": "cmd", "args": [{"type": "servo", "state": "closed"}], "namespace": "/"} in pi.get_received()
+    pi.disconnect()
+    hacker.disconnect()
