@@ -3,7 +3,8 @@
     "allow": [
       "Bash(npx vite:*)",
       "Bash(npm install:*)",
-      "Bash(gh pr:*)"
+      "Bash(gh pr:*)",
+      "Bash(node -e ':*)"
     ]
   }
 }
