@@ -27,7 +27,7 @@ export default function Car() {
     // Apply off-road penalty
     const savedMaxSpeed = car.maxSpeed;
     if (offroad) {
-      car.maxSpeed = 12; // slower off-road
+      car.maxSpeed = 18; // slower off-road
     }
 
     const oldX=car.x,oldZ=car.z;
@@ -40,7 +40,7 @@ export default function Car() {
     if (!g) return;
 
     // Off-road camera shake
-    const shakeY = offroad && car.v > 2 ? Math.sin(performance.now() * 0.03) * 0.003 * car.v : 0;
+    const shakeY = offroad && car.v > 2 ? Math.sin(performance.now() * 0.02) * 0.001 * car.v : 0;
 
     g.position.set(car.x, shakeY, car.z);
     g.rotation.y = car.yaw;

@@ -4,13 +4,13 @@ export const HAND_CONFIG = {
   trackingConfidence: 0.60,
 
   maxWheelAngle: 55,   // degrees for full steering lock
-  deadzone: 2.5,       // degrees
+  deadzone: 4.5,       // degrees — absorbs typical MediaPipe jitter
 
   minPalmSeparation: 0.10, // normalized webcam coords
 
   // One Euro Filter parameters
   oneEuro: {
-    minCutoff: 1.0,
+    minCutoff: 0.4,
     beta: 0.007,
     dCutoff: 1.0,
   },

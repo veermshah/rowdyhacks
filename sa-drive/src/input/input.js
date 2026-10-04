@@ -23,4 +23,8 @@ export const input = {
 
   inferenceMs: 0,
   inferenceFps: 0,
+
+  // Diagnostic — gesture state machine
+  gestureCommitted: 'NORMAL',
+  gesturePending: null,
 };

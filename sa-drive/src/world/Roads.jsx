@@ -29,5 +29,5 @@ export default function Roads({roads,river}) {
     });
   },[roads,river]);
   useEffect(()=>()=>meshes.forEach(m=>m.g.dispose()),[meshes]);
-  return <group>{meshes.map(({g,color},i)=><mesh key={i} geometry={g} receiveShadow><meshStandardMaterial color={color} roughness={.85} emissive={color} emissiveIntensity={i===1?.22:.08} side={THREE.DoubleSide}/></mesh>)}</group>;
+  return <group>{meshes.map(({g,color},i)=><mesh key={i} geometry={g} receiveShadow><meshLambertMaterial color={color} emissive={color} emissiveIntensity={i===1?.22:.08} side={THREE.DoubleSide}/></mesh>)}</group>;
 }

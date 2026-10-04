@@ -2,14 +2,14 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { buildRibbon,mergeRibbons } from './ribbon.js';
 import { nearestRiver,offsetPath,RIVER_WIDTH,WALKWAY_WIDTH,WATER_Y,WALKWAY_Y,CHANNEL_HALF } from './riverNetwork.js';
-import { buildBuildingGrid,overlapsBuilding } from './collision.js';
-import { buildRoadGrid,queryNearestRoad } from './grid.js';
+import { overlapsBuilding } from './collision.js';
+import { queryNearestRoad } from './grid.js';
 function ribbonGeometry(ribbons){const data=mergeRibbons(ribbons.filter(Boolean)),g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.BufferAttribute(data.positions,3));g.setIndex(data.indices);g.computeVertexNormals();return g;}
 function colorGeometry(geometry,color){const g=geometry.index?geometry.toNonIndexed():geometry;if(g!==geometry)geometry.dispose();const c=new THREE.Color(color),values=new Float32Array(g.attributes.position.count*3);for(let i=0;i<values.length;i+=3){values[i]=c.r;values[i+1]=c.g;values[i+2]=c.b;}g.setAttribute('color',new THREE.BufferAttribute(values,3));return g;}
 function merge(items){if(!items.length)return null;const g=mergeGeometries(items,false);items.forEach(g=>g.dispose());return g;}
-export function buildRiverScene(network,roads,buildings){
+export function buildRiverScene(network,roads,buildings,buildingGrid,roadGrid){
   const water=[],walkways=[],mask=[],solid=[],lights=[],foliage=[],bridges=[];
-  const obstacles=buildBuildingGrid(buildings),roadGrid=buildRoadGrid(roads);
+  const obstacles=buildingGrid;
   const add=(g,color,target=solid)=>target.push(colorGeometry(g,color));
   const box=(x,y,z,w,h,d,color)=>add(new THREE.BoxGeometry(w,h,d).translate(x,y,z),color);
   const beam=(a,b,w,h,color,target=solid)=>{const start=new THREE.Vector3(a.x,a.y,a.z),end=new THREE.Vector3(b.x,b.y,b.z),delta=end.clone().sub(start),g=new THREE.BoxGeometry(w,h,delta.length());g.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0,0,1),delta.normalize()));g.translate((a.x+b.x)/2,(a.y+b.y)/2,(a.z+b.z)/2);add(g,color,target);};

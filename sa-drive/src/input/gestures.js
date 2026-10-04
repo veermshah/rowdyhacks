@@ -13,40 +13,140 @@ export function isOpenHand(points) {
     const [base,pip,dip,tip]=points.slice(m,m+4);
     if(straight(base,pip,dip)&&straight(pip,dip,tip)&&distance(points[0],tip)>distance(points[0],pip)*1.12)extended++;
   }
-  return extended>=3;
+  return extended>=4;
 }
-export function createGearGesture(){return {reverse:false,candidate:null,since:0,last:null};}
-// Joint geometry uses world coordinates; upward direction uses the unmirrored
-// image (y increases down). Neither test depends on left/right handedness.
-export function isThumbsUp(points,image=points) {
-  if(!points||points.length<21||!image||image.length<21)return false;
-  const scale=distance(points[0],points[9]);if(scale<1e-6)return false;
+
+/** Fist: most fingers curled toward palm */
+export function isFist(points) {
+  if(!points || points.length<21)return false;
+  let curled=0;
   for(const m of [5,9,13,17]) {
     const [base,pip,dip,tip]=points.slice(m,m+4);
-    if(straight(base,pip,dip)||distance(tip,base)>distance(pip,base)*1.25||distance(tip,points[0])>distance(pip,points[0])*1.05)return false;
+    if(distance(points[0],tip)<distance(points[0],pip)*1.1 && !straight(base,pip,dip))curled++;
   }
-  if(!straight(points[1],points[2],points[3])||!straight(points[2],points[3],points[4]))return false;
-  if(distance(points[4],points[5])<scale*.65||distance(points[4],points[0])<distance(points[2],points[0])*1.2)return false;
-  const up=image[2].y-image[4].y,side=Math.abs(image[4].x-image[2].x);
-  const imageScale=Math.hypot(image[0].x-image[9].x,image[0].y-image[9].y);
-  return up>imageScale*.35&&up>side*1.4&&image[4].y<image[5].y-imageScale*.15;
+  return curled>=3;
 }
-export function createRearGesture(){return {active:false,candidate:false,since:0,last:null};}
-export function updateRearGesture(state,valid,time){
-  if(state.last!==null&&time-state.last>120){state.candidate=false;state.since=time;if(time-state.last>300)state.active=false;}
-  state.last=time;
-  if(valid!==state.candidate){state.candidate=valid;state.since=time;}
-  if(time-state.since>=(valid?200:160))state.active=valid;
-  return state.active;
+
+// --- Unified gesture state machine ---
+// States: 'NORMAL' | 'REVERSE' | 'REAR_VIEW'
+// Prevents flickering by requiring sustained detection before committing.
+
+// Activation thresholds (ms)
+const ENTER_REVERSE_MS = 280;
+const LEAVE_REVERSE_MS = 350; // hysteresis: harder to leave reverse
+const ENTER_REAR_MS = 220;
+const LEAVE_REAR_MS = 180;
+const ENTER_NORMAL_MS = 250;
+// Max gap (ms) between inference frames before resetting pending state
+const MAX_FRAME_GAP = 200;
+
+export function createGestureState() {
+  return {
+    committed: 'NORMAL',  // current stable state
+    pending: null,         // gesture being evaluated
+    pendingSince: 0,       // when pending started
+    lastFrame: null,       // timestamp of last inference frame
+  };
 }
-export function rearViewActive(state,time){return state.rearView&&time-state.rearViewUpdatedAt<300;}
-export function updateGearGesture(state,hands,time) {
-  // Missing tracking cannot count toward either stable transition.
-  if(!hands||hands.length!==2){state.candidate=null;state.last=null;return state.reverse;}
-  if(state.last!==null && time-state.last>120)state.candidate=null;
-  state.last=time;
-  const open=hands.every(isOpenHand);
-  if(open!==state.candidate){state.candidate=open;state.since=time;}
-  if(time-state.since>=160)state.reverse=open;
-  return state.reverse;
+
+/**
+ * Detect which gesture two hands are performing.
+ * Returns 'REVERSE' | 'REAR_VIEW' | 'NORMAL' | null (uncertain)
+ */
+function detectGesture(hands) {
+  if (!hands || hands.length !== 2) return null; // uncertain
+
+  const h0open = isOpenHand(hands[0]);
+  const h1open = isOpenHand(hands[1]);
+  const h0fist = isFist(hands[0]);
+  const h1fist = isFist(hands[1]);
+
+  // Both open → reverse
+  if (h0open && h1open) return 'REVERSE';
+
+  // One open + one fist → rear view
+  if ((h0open && h1fist) || (h0fist && h1open)) return 'REAR_VIEW';
+
+  // Both classified as something definite but not a special gesture → normal
+  // If either hand is ambiguous (neither open nor fist), return null (uncertain)
+  const h0known = h0open || h0fist;
+  const h1known = h1open || h1fist;
+  if (h0known && h1known) return 'NORMAL';
+
+  return null; // uncertain — at least one hand in ambiguous state
+}
+
+/**
+ * Get the required hold time to transition from current state to a new state.
+ */
+function transitionTime(from, to) {
+  if (to === 'REVERSE') return from === 'REVERSE' ? 0 : ENTER_REVERSE_MS;
+  if (to === 'REAR_VIEW') return from === 'REAR_VIEW' ? 0 : ENTER_REAR_MS;
+  if (to === 'NORMAL') {
+    if (from === 'REVERSE') return LEAVE_REVERSE_MS;
+    if (from === 'REAR_VIEW') return LEAVE_REAR_MS;
+    return 0;
+  }
+  return ENTER_NORMAL_MS;
+}
+
+/**
+ * Update the gesture state machine. Call once per inference frame.
+ * Returns { reverse: bool, rearView: bool }
+ */
+export function updateGestureState(state, hands, time) {
+  // If too long between frames, reset pending (tracking was interrupted)
+  if (state.lastFrame !== null && time - state.lastFrame > MAX_FRAME_GAP) {
+    state.pending = null;
+  }
+  state.lastFrame = time;
+
+  const detected = detectGesture(hands);
+
+  if (detected === null) {
+    // Uncertain classification — hold current committed state, don't advance pending.
+    // But don't reset pending either — brief noise frames are ignored.
+    return stateOutput(state);
+  }
+
+  if (detected === state.committed) {
+    // Already in this state — clear any pending transition
+    state.pending = null;
+    return stateOutput(state);
+  }
+
+  if (detected !== state.pending) {
+    // New pending gesture — start timer
+    state.pending = detected;
+    state.pendingSince = time;
+    return stateOutput(state);
+  }
+
+  // Same pending gesture continues — check if held long enough
+  const required = transitionTime(state.committed, detected);
+  if (time - state.pendingSince >= required) {
+    state.committed = detected;
+    state.pending = null;
+  }
+
+  return stateOutput(state);
+}
+
+function stateOutput(state) {
+  return {
+    reverse: state.committed === 'REVERSE',
+    rearView: state.committed === 'REAR_VIEW',
+  };
+}
+
+export function resetGestureState(state) {
+  state.committed = 'NORMAL';
+  state.pending = null;
+  state.pendingSince = 0;
+  state.lastFrame = null;
+}
+
+// Keep rearViewActive for PursuitHud polling
+export function rearViewActive(state, time) {
+  return state.rearView && time - state.rearViewUpdatedAt < 300;
 }

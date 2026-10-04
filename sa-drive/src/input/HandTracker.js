@@ -1,6 +1,5 @@
-import { createGearGesture, updateGearGesture, isThumbsUp,createRearGesture,updateRearGesture } from './gestures.js';
-const gearGesture=createGearGesture();
-const rearGesture=createRearGesture();
+import { createGestureState, updateGestureState, resetGestureState } from './gestures.js';
+const gestureState=createGestureState();
 let gearReset=-1;
 import { FilesetResolver, HandLandmarker } from '@mediapipe/tasks-vision';
 import { HAND_CONFIG } from '../config/handConfig.js';
@@ -21,6 +20,10 @@ let onCalibrationDone = null;
 // Lost-hand smoothing
 let handsLostAt = null;
 let lastValidSteer = 0;
+
+// Stable gas/brake — smoothed so single-frame tracking drops can't cause oscillation
+let stableGas = 0.75;
+let stableBrake = 0;
 
 // FPS tracking
 let inferenceCount = 0;
@@ -63,7 +66,7 @@ export function startTracking() {
 
 export function stopTracking() {
   running = false;
-  input.rearView=false;Object.assign(rearGesture,createRearGesture());
+  input.rearView=false;resetGestureState(gestureState);
 }
 
 function trackLoop() {
@@ -94,15 +97,28 @@ function trackLoop() {
   requestAnimationFrame(trackLoop);
 }
 
+// Smoothing rate for gas/brake — converges at ~85% per frame toward target
+const GAS_SMOOTH = 0.15;
+
 function processResults(results, timestamp) {
-  if(gearReset!==input.gearReset){Object.assign(gearGesture,createGearGesture());Object.assign(rearGesture,createRearGesture());gearReset=input.gearReset;}
+  if(gearReset!==input.gearReset){resetGestureState(gestureState);gearReset=input.gearReset;}
   const landmarks = results.landmarks;
-  const thumb=!calibrating&&(landmarks||[]).some((hand,i)=>isThumbsUp(results.worldLandmarks?.[i]||hand,hand));
-  input.rearView=updateRearGesture(rearGesture,thumb,timestamp);
-  input.rearViewUpdatedAt=timestamp;
+  // Unified gesture detection: pass both hands' points to state machine
+  if(!calibrating && input.mode==='hands') {
+    const hands=results.worldLandmarks?.length===2?results.worldLandmarks:(landmarks?.length===2?landmarks:null);
+    const gesture=updateGestureState(gestureState,hands?[hands[0],hands[1]]:null,timestamp);
+    input.reverse=gesture.reverse;
+    input.rearView=gesture.rearView;
+    input.rearViewUpdatedAt=timestamp;
+    input.gestureCommitted=gestureState.committed;
+    input.gesturePending=gestureState.pending;
+  }
+
+  // Target gas/brake for this frame — will be smoothed before writing to input
+  let targetGas = stableGas;
+  let targetBrake = stableBrake;
 
   if (!landmarks || landmarks.length < 2) {
-    updateGearGesture(gearGesture,null,timestamp);
     // Hands lost
     input.handsVisible = false;
     input.leftPalm = null;
@@ -115,36 +131,43 @@ function processResults(results, timestamp) {
     const lostDuration = timestamp - handsLostAt;
 
     if (input.mode === 'hands') {
-      input.gas=0;input.brake=.6;
-      if (lostDuration < HAND_CONFIG.lostHandCenterMs) {
-        // Smooth toward center
+      if (lostDuration < 150) {
+        // Brief tracking gap — hold last stable gas/brake/steer
+        input.steer = lastValidSteer;
+      } else if (lostDuration < HAND_CONFIG.lostHandCenterMs) {
+        targetGas = 0; targetBrake = 0.6;
         lastValidSteer *= 0.92;
         input.steer = lastValidSteer;
       } else if (lostDuration < HAND_CONFIG.lostHandPauseMs) {
-        // Continue centering
+        targetGas = 0; targetBrake = 0.6;
         lastValidSteer *= 0.95;
         input.steer = lastValidSteer;
-        input.gas = Math.max(0, input.gas - 0.02);
       } else {
-        // Pause — hands gone too long
         input.steer = 0;
-        input.gas = 0;
-        input.brake = 0.3;
+        targetGas = 0; targetBrake = 0.3;
       }
+      // Smooth gas/brake toward target
+      stableGas += (targetGas - stableGas) * GAS_SMOOTH;
+      stableBrake += (targetBrake - stableBrake) * GAS_SMOOTH;
+      input.gas = stableGas;
+      input.brake = stableBrake;
     }
     return;
   }
 
-  if(!calibrating && input.mode==='hands') {
-    // A rear glance holds the current gear: making a fist for thumbs-up must
-    // not cancel reverse. Wheel position continues through the usual filter.
-    input.reverse=updateGearGesture(gearGesture,thumb||rearGesture.active?null:(results.worldLandmarks?.length===2?results.worldLandmarks:landmarks),timestamp);
-  }
   // Calculate mirrored palm centers
   const palms = landmarks.map(hand => mirrorPalm(palmCenter(hand)));
 
   const assigned = assignHands(palms);
-  if (!assigned) return;
+  if (!assigned) {
+    // Hands detected but assignment failed — hold stable values
+    if (input.mode === 'hands') {
+      input.gas = stableGas;
+      input.brake = stableBrake;
+      input.steer = lastValidSteer;
+    }
+    return;
+  }
 
   const { left, right } = assigned;
   input.leftPalm = left;
@@ -154,7 +177,15 @@ function processResults(results, timestamp) {
 
   // Check palm separation
   const separation = Math.abs(right.x - left.x);
-  if (separation < HAND_CONFIG.minPalmSeparation) return;
+  if (separation < HAND_CONFIG.minPalmSeparation) {
+    // Hands too close — hold stable values instead of leaving stale
+    if (input.mode === 'hands') {
+      input.gas = stableGas;
+      input.brake = stableBrake;
+      input.steer = lastValidSteer;
+    }
+    return;
+  }
 
   // Calculate raw angle
   const rawAngle = wheelAngle(left, right);
@@ -191,18 +222,21 @@ function processResults(results, timestamp) {
   if (input.mode === 'hands') input.steer = normalized;
   lastValidSteer = normalized;
 
-  // In hands mode, default to some gas (player steers, auto-drive light)
+  // In hands mode, smooth gas/brake toward driving targets
   if (input.mode === 'hands') {
-    input.gas = input.reverse ? 0.4 : 0.75;
-    input.brake = 0;
+    targetGas = input.reverse ? 0.4 : 0.75;
+    targetBrake = 0;
+    stableGas += (targetGas - stableGas) * GAS_SMOOTH;
+    stableBrake += (targetBrake - stableBrake) * GAS_SMOOTH;
+    input.gas = stableGas;
+    input.brake = stableBrake;
   }
 }
 
 export function startCalibration() {
   return new Promise((resolve) => {
     calibrating = true;
-    Object.assign(gearGesture,createGearGesture());input.reverse=false;
-    Object.assign(rearGesture,createRearGesture());input.rearView=false;
+    resetGestureState(gestureState);input.reverse=false;input.rearView=false;
     calibrationSamples = [];
     onCalibrationDone = resolve;
     steerFilter?.reset();

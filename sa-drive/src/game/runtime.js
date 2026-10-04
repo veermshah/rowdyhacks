@@ -1,11 +1,11 @@
 import { findFairStart } from '../lib/fairStart.js';
-import { PURSUIT_GRACE_SECONDS } from './startConfig.js';
+import { PURSUIT_GRACE_SECONDS, POLICE_START_DISTANCE } from './startConfig.js';
 import { POLICE_CONFIG as PC } from '../config/policeConfig.js';
 import { policeTargetSpeed,angleDelta,updatePoliceBoost } from './policeDriving.js';
 import { car } from '../car/state.js';
 import { input } from '../input/input.js';
 import { destinations,navigation } from '../config/navigation.js';
-import { calculateRoute,routeProgress,clearSegment,nearestEdge } from '../lib/roadGraph.js';
+import { calculateRoute,routeProgress,clearSegment,nearestEdge,policeSpawn } from '../lib/roadGraph.js';
 import { overlapsBuilding } from '../lib/collision.js';
 export const game={player:car,ready:false,started:false,caught:false,distance:0,epoch:0,spawn:null,anchor:null,graceRemaining:PURSUIT_GRACE_SECONDS,graph:null,obstacles:null,police:null};
 export const guidance={route:null,version:0,selected:-1,remaining:0,lookahead:null,offRoute:0,status:'loading',lastPlan:-Infinity,arrived:false};
@@ -109,6 +109,33 @@ export function stepPursuit(dt){
   }
   cop.stalled=moved<.01?cop.stalled+dt:0;
   if(cop.stalled>2){cop.lastPlan=-Infinity;cop.stalled=0;}
+}
+export function skipToDestination(){
+  if(!game.ready)return;
+  // Teleport car to nearest road near the CURRENT destination
+  const dest=destinations[navigation.selected];
+  const snap=nearestEdge(game.graph,dest);
+  if(!snap)return;
+  // Align car along the road edge direction
+  const edge=snap.edge,a=game.graph.nodes[edge.start],b=game.graph.nodes[edge.end];
+  const yaw=Math.atan2(b.x-a.x,b.z-a.z);
+  Object.assign(car,{x:snap.x,z:snap.z,yaw,v:0,offroad:false,safePosition:{x:snap.x,z:snap.z,yaw}});
+  Object.assign(input,{gas:0,brake:0,steer:0,reverse:false,rearView:false});
+  input.gearReset++;
+  game.caught=false;game.epoch++;
+  // Advance to NEXT destination
+  const next=(navigation.selected+1)%destinations.length;
+  navigation.selected=next;
+  // Reposition police behind the new car position with grace period
+  game.graceRemaining=PURSUIT_GRACE_SECONDS;
+  const police=policeSpawn(game.graph,car,POLICE_START_DISTANCE);
+  if(police){
+    game.police={...police,v:0,route:null,index:1,lastPlan:-Infinity,replanDelay:PC.routeUpdateMin,plans:0,turnWait:0,blocked:new Set(),stalled:0,active:true};
+  }
+  // Force route recalculation for the new destination
+  guidance.selected=-1;guidance.lastPlan=-Infinity;guidance.arrived=false;
+  updateGuidance(true);
+  return next;
 }
 export function tickGame(dt){
   elapsed+=Math.min(dt,.05);

@@ -8,7 +8,7 @@ export function createCar() {
     z: 0,
     yaw: 0,
     v: 0,
-    maxSpeed: 25, // m/s ≈ 56 mph
+    maxSpeed: 38, // m/s ≈ 85 mph
     offroad: false,
     nearestRoadDist: 0,
   };
@@ -35,8 +35,8 @@ export function stepCar(car, input, dt) {
   const braking=input.brake*12+(opposite?9:0);
   const old=car.v;
   if(braking>0)car.v=Math.sign(car.v)*Math.max(0,Math.abs(car.v)-braking*dt);
-  if(!opposite && !input.brake)car.v+=direction*input.gas*6*dt;
-  car.v*=Math.max(0,1-.15*dt);
+  if(!opposite && !input.brake)car.v+=direction*input.gas*10*dt;
+  car.v*=Math.max(0,1-.08*dt);
   if(opposite && old*car.v<0)car.v=0;
   car.v=Math.max(-car.maxSpeed*.3,Math.min(car.v,car.maxSpeed));
 

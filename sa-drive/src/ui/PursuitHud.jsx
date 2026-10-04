@@ -13,7 +13,7 @@ export default function PursuitHud(){
   },[]);
   return <>
     <div className="pursuit-status"><span className="police-dot"/> POLICE <strong>{state.grace>0?`START IN ${state.grace}s`:`${state.gap} m`}</strong>{state.reverse&&<span className="reverse-badge">R / REVERSE</span>}</div>
-    <div className="drive-hint">{state.rear?'REAR VIEW · release thumbs-up to return':'Open hands: reverse · Thumbs-up: look behind · X: keyboard reverse'}</div>
+    <div className="drive-hint">{state.rear?'REAR VIEW · release to return':'Open hands: reverse · Open+fist: look behind · X: keyboard reverse'}</div>
     {state.caught&&<div className="caught-overlay" role="dialog" aria-modal="true" aria-labelledby="caught-title"><div className="caught-card">
       <div className="nav-eyebrow">SAN ANTONIO / NIGHT DRIVE</div><h1 id="caught-title">CAUGHT</h1><p>The police caught you.</p>
       <p>Distance driven: <strong>{(state.distance/1609.344).toFixed(2)} mi</strong></p>

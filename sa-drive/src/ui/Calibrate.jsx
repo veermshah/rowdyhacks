@@ -107,7 +107,7 @@ export default function Calibrate({ videoRef, onReady }) {
         Follow the glowing road route. Stay ahead of the police.
       </p>
 
-      <p style={{fontSize:12,color:'#a9c4d6'}}>Turn your hands like a wheel. Open both hands to reverse; curl fingers to drive forward.</p>
+      <p style={{fontSize:12,color:'#a9c4d6'}}>Turn your hands like a wheel. Open both hands to reverse. One open + one fist to look behind.</p>
       {state === STATES.INIT && (
         <>
           <button style={{ ...btn, background: '#3b82f6', color: '#fff' }} onClick={startHands}>

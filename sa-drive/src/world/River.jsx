@@ -2,8 +2,8 @@ import { useMemo,useEffect,useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { buildRiverScene } from '../lib/riverGeometry.js';
-export default function River({network,roads,buildings}){
-  const scene=useMemo(()=>buildRiverScene(network,roads,buildings),[network,roads,buildings]);
+export default function River({network,roads,buildings,buildingGrid,roadGrid}){
+  const scene=useMemo(()=>buildRiverScene(network,roads,buildings,buildingGrid,roadGrid),[network,roads,buildings,buildingGrid,roadGrid]);
   const uniforms=useMemo(()=>THREE.UniformsUtils.merge([THREE.UniformsLib.fog,{time:{value:0}}]),[]);
   const waterMaterial=useRef();
   useFrame((_,dt)=>{if(waterMaterial.current)waterMaterial.current.uniforms.time.value+=Math.min(dt,.05);});

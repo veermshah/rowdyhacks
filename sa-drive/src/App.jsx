@@ -34,6 +34,7 @@ export default function App() {
   const [started, setStarted] = useState(false);
   const [mapData, setMapData] = useState(null);
   const [mapError, setMapError] = useState(null);
+  const [grids, setGrids] = useState(null);
   const gridRef = useRef(null);
 
   useEffect(() => {
@@ -58,9 +59,11 @@ export default function App() {
         data.collisionObstacles = [...data.buildings,...landmarkObstacles(),...riverObstacles(data.river,grid,queryNearestRoad)];
         const obstacles = buildBuildingGrid(data.collisionObstacles);
         setBuildingGrid(obstacles);
+        data.roadGrid = grid;
+        data.buildingGrid = obstacles;
         setMapData(data);
+        setGrids({ road: grid, building: obstacles });
 
-        // Build spatial grid
         gridRef.current = grid;
         setRoadGrid(grid);
 
@@ -130,9 +133,9 @@ export default function App() {
             <Roads roads={mapData.roads} river={mapData.river} />
             <Buildings buildings={mapData.buildings} />
             <RouteBranding buildings={mapData.buildings} />
-            <River network={mapData.river} roads={mapData.roads} buildings={mapData.buildings} />
-            <Trees roads={mapData.roads} buildings={mapData.collisionObstacles} bounds={treeBounds} />
-            <StreetProps roads={mapData.roads} buildings={mapData.collisionObstacles} />
+            <River network={mapData.river} roads={mapData.roads} buildings={mapData.buildings} buildingGrid={grids?.building} roadGrid={grids?.road} />
+            <Trees roadGrid={grids?.road} buildingGrid={grids?.building} bounds={treeBounds} />
+            <StreetProps roads={mapData.roads} roadGrid={grids?.road} buildingGrid={grids?.building} />
           </>
         )}
 
