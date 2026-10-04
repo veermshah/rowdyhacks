@@ -12,7 +12,7 @@
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",
     "test": "node --test",
-    "tunnel": "cloudflared tunnel --no-autoupdate --url http://localhost:5001",
+    "tunnel": "cloudflared tunnel --no-autoupdate --protocol http2 --url http://localhost:5001",
     "debug": "node src/server.js --debug"
   },
   "dependencies": {
