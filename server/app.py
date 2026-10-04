@@ -26,6 +26,7 @@ from flask import Flask, jsonify, request
 from flask_cors import CORS
 from flask_socketio import SocketIO, emit, join_room
 
+from alamo_challenge import AlamoChallenge
 from download_assets import MODELS_DIR, ensure_assets
 
 try:
@@ -482,11 +483,14 @@ class CarState:
     loot: int = 0
     wanted_level: int = 0
     riverwalk_cleared: bool = False
+    alamo_cleared: bool = False
+    alamo_code: str = None   # the Alamo vault's 4-digit code, set once on ALAMO_DONE
     claimed_tags: set = field(default_factory=set)
 
     def to_dict(self, car_id):
         return {"carId": car_id, "loot": self.loot, "wantedLevel": self.wanted_level,
-                "riverwalkCleared": self.riverwalk_cleared}
+                "riverwalkCleared": self.riverwalk_cleared,
+                "alamoCleared": self.alamo_cleared, "alamoCode": self.alamo_code}
 
 
 def sign_nfc_payload(tag_id, amount):
@@ -554,6 +558,16 @@ def _run_blocking(fn, *args):
     return fn(*args)
 
 
+def _sleep(seconds):
+    """time.sleep blocks eventlet's whole worker thread; eventlet.sleep yields instead."""
+    if socketio.async_mode == "eventlet":
+        import eventlet
+
+        eventlet.sleep(seconds)
+    else:
+        time.sleep(seconds)
+
+
 class Session:
     def __init__(self, car_id, role):
         self.car_id = car_id
@@ -567,14 +581,94 @@ cars = {}
 sessions = {}
 state_lock = threading.Lock()
 
+# One AlamoChallenge per car (shared by that car's Pi, driver and hacker
+# clients), unlike RiverwalkChallenge which is per-session (each browser tab
+# runs its own face check).
+alamo_challenges = {}
+_alamo_loop_started = False
+
 
 def get_car(car_id):
     with state_lock:
         return cars.setdefault(car_id, CarState())
 
 
+def get_alamo(car_id):
+    global _alamo_loop_started
+    with state_lock:
+        ch = alamo_challenges.setdefault(car_id, AlamoChallenge())
+        if not _alamo_loop_started:
+            _alamo_loop_started = True
+            # daemon=True: a plain test run (or REPL) must be able to exit even
+            # though this loop never returns on its own.
+            threading.Thread(target=_alamo_tick_loop, daemon=True).start()
+    return ch
+
+
 def broadcast_car(car_id):
     socketio.emit("car_state", get_car(car_id).to_dict(car_id), to=f"car:{car_id}")
+
+
+def _apply_alamo_events(car_id, events, ch):
+    """Side effects of Alamo events on the shared car (both players see them).
+    Takes the already-looked-up `ch` rather than calling get_alamo() again here -
+    that would try to re-acquire state_lock while the "done" branch below is
+    still holding it, which deadlocks (threading.Lock isn't reentrant)."""
+    car = get_car(car_id)
+    heat_events = ("wrong", "spotted", "wrong_code", "hint")
+    if any(e in events for e in heat_events):
+        with state_lock:
+            car.wanted_level = min(MAX_WANTED_LEVEL, car.wanted_level + 1)
+        broadcast_car(car_id)
+    if "done" in events:
+        with state_lock:
+            first = not car.alamo_cleared
+            car.alamo_cleared = True
+            if first:
+                car.alamo_code = ch.correct_code
+        broadcast_car(car_id)
+
+
+_alamo_last_snapshot = {}  # car_id -> last emitted general snapshot, to dedupe the 10Hz tick loop
+
+
+def _flush_alamo(car_id, ch):
+    """Sends queued Pi commands and pushes fresh state to the car/hacker rooms.
+
+    The tick loop below calls this ~10x/sec for every active car so the sensor
+    hold timers and LCD/hint cycling keep advancing - but most of those ticks
+    change nothing (idle waiting for a move, steady light reading, etc.), and
+    broadcasting the full snapshot anyway was forcing a React re-render on
+    every connected browser 10x/sec, which is visible as UI jank/"glitching"
+    fighting the driving game's render loop for the main thread. Only emit
+    when the general snapshot actually differs from the last one sent (or
+    there are Pi commands to deliver, which always accompany a real change).
+    """
+    now = time.monotonic()
+    cmds = ch.pop_cmds()
+    for cmd in cmds:
+        socketio.emit("cmd", cmd, to=f"car:{car_id}:pi")
+    snap = ch.snapshot(now)
+    if cmds or snap != _alamo_last_snapshot.get(car_id):
+        _alamo_last_snapshot[car_id] = snap
+        socketio.emit("alamo_state", snap, to=f"car:{car_id}")
+        socketio.emit("alamo_state", ch.snapshot(now, include_hacker=True), to=f"car:{car_id}:hacker")
+
+
+def _alamo_tick_loop():
+    """Server-side timers: light-sensor hold windows and the hint/LCD cycle keep
+    advancing even when the Pi isn't sending new readings."""
+    while True:
+        with state_lock:
+            car_ids = list(alamo_challenges.keys())
+        for car_id in car_ids:
+            ch = alamo_challenges[car_id]
+            if not ch.active:
+                continue
+            events = ch.tick(time.monotonic())
+            _apply_alamo_events(car_id, events, ch)
+            _flush_alamo(car_id, ch)
+        _sleep(0.1)
 
 
 def _session():
@@ -627,8 +721,137 @@ def on_join_car(data):
     s = _session()
     s.car_id, s.role = car_id, role
     join_room(f"car:{car_id}")
+    # The vault's "cmd" stream only goes to the Pi room. Solo play has no
+    # separate hacker device, so the one browser (role "driver" or "hacker")
+    # doubles as the hacker dashboard and gets the full route/hints; only the
+    # hardware relay ("pi") is kept out of that room.
+    is_hacker = role != "pi"
+    if role == "pi":
+        join_room(f"car:{car_id}:pi")
+    if is_hacker:
+        join_room(f"car:{car_id}:hacker")
     emit("car_state", get_car(car_id).to_dict(car_id))
+    now = time.monotonic()
+    ch = get_alamo(car_id)
+    emit("alamo_state", ch.snapshot(now, include_hacker=is_hacker))
     return {"ok": True}
+
+
+# --------------------------------------------------------------------------- #
+# Alamo challenge: Raspberry Pi hardware relay + hacker dashboard
+# --------------------------------------------------------------------------- #
+@socketio.on("input")
+def on_input(data):
+    """Raspberry Pi relay: {"device": "joystick"|"light", "value": ...}.
+
+    This is the fixed Pi wire protocol; AlamoChallenge itself ignores input
+    whenever no run is active, so this handler doesn't need to gate on substage.
+    """
+    s = _session()
+    device = (data or {}).get("device")
+    value = (data or {}).get("value")
+    if device not in ("joystick", "light"):
+        return {"error": f"unknown device {device!r}"}
+    ch = get_alamo(s.car_id)
+    events = ch.handle_input(device, value, time.monotonic())
+    _apply_alamo_events(s.car_id, events, ch)
+    _flush_alamo(s.car_id, ch)
+    return {"ok": True}
+
+
+@socketio.on("alamo_start")
+def on_alamo_start(*_):
+    """Call when the crew reaches Challenge 1. A no-op if a run is already
+    active, so a client reconnecting/rejoining can't wipe live progress -
+    use alamo_admin_reset to force a fresh run."""
+    s = _session()
+    ch = get_alamo(s.car_id)
+    if not ch.active:
+        ch.start(time.monotonic())
+    _flush_alamo(s.car_id, ch)
+    return {"ok": True}
+
+
+@socketio.on("alamo_submit_code")
+def on_alamo_submit_code(data):
+    """Hacker's code-entry keypad (NOT the Pi protocol - the 4-digit code is
+    typed on the website). {"code": "1234"}. The server is the only validator;
+    the correct code is never sent to any non-admin client."""
+    s = _session()
+    code = (data or {}).get("code") if isinstance(data, dict) else data
+    ch = get_alamo(s.car_id)
+    events, correct = ch.submit_code(code, time.monotonic())
+    _apply_alamo_events(s.car_id, events, ch)
+    _flush_alamo(s.car_id, ch)
+    return {"ok": True, "correct": correct}
+
+
+@socketio.on("alamo_request_hint")
+def on_alamo_request_hint(*_):
+    """Hacker's "Request hint" button: unlock the next hint immediately, +1 heat."""
+    s = _session()
+    ch = get_alamo(s.car_id)
+    events = ch.request_hint(time.monotonic())
+    _apply_alamo_events(s.car_id, events, ch)
+    _flush_alamo(s.car_id, ch)
+    return {"ok": True}
+
+
+@socketio.on("alamo_admin_skip")
+def on_alamo_admin_skip(*_):
+    """Dev: jump straight to ALAMO_DONE."""
+    if not DEV_MODE:
+        return {"error": "dev mode disabled"}
+    s = _session()
+    ch = get_alamo(s.car_id)
+    events = ch.skip(time.monotonic())
+    _apply_alamo_events(s.car_id, events, ch)
+    _flush_alamo(s.car_id, ch)
+    return {"ok": True}
+
+
+@socketio.on("alamo_admin_reset")
+def on_alamo_admin_reset(*_):
+    """Dev: restart the Alamo run with fresh sequences and a fresh code."""
+    if not DEV_MODE:
+        return {"error": "dev mode disabled"}
+    s = _session()
+    ch = get_alamo(s.car_id)
+    ch.reset(time.monotonic())
+    _flush_alamo(s.car_id, ch)
+    return {"ok": True}
+
+
+@socketio.on("alamo_admin_show_sequence")
+def on_alamo_admin_show_sequence(data):
+    """Dev: {"show": bool} -> the current round's memory sequence as text."""
+    if not DEV_MODE:
+        return {"error": "dev mode disabled"}
+    s = _session()
+    ch = get_alamo(s.car_id)
+    show = bool((data or {}).get("show"))
+    sequence = ch.sequences[ch.round] if show and ch.active and ch.sequences else None
+    return {"ok": True, "sequence": sequence}
+
+
+@socketio.on("alamo_admin_show_code")
+def on_alamo_admin_show_code(data):
+    """Dev: {"show": bool} -> the correct 4-digit code, for the hidden admin panel."""
+    if not DEV_MODE:
+        return {"error": "dev mode disabled"}
+    s = _session()
+    ch = get_alamo(s.car_id)
+    show = bool((data or {}).get("show"))
+    return {"ok": True, "code": ch.correct_code if show else None}
+
+
+@socketio.on("alamo_sim_input")
+def on_alamo_sim_input(data):
+    """Dev simulator (admin page stands in for the Pi): same shape as a real
+    `input` event, so it exercises the exact same code path."""
+    if not DEV_MODE:
+        return {"error": "dev mode disabled"}
+    return on_input(data)
 
 
 @socketio.on("start_challenge")

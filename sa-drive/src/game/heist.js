@@ -22,13 +22,22 @@ let state = {
   challenge: null,
   alarm: null,
   lastReward: null,
+  // Challenge 1 - Alamo vault. The hardware (Pi + Arduino) runs the actual
+  // safecracking (the "camera" is a light sensor); this dashboard is a
+  // read-only view of its state plus the Archive/hints, which the server
+  // only sends to non-Pi ("hacker") clients. The code itself is typed here.
+  alamoCleared: false,
+  alamoCode: null,
+  alamoOpen: false,
+  alamoOpenReason: null, // 'arrived' | 'dev'
+  alamo: null, // latest `alamo_state` snapshot ({substage, route, hintsScreen, ...})
 };
 const listeners = new Set();
 let socket = null;
 
 function set(patch) {
   state = { ...state, ...patch };
-  game.paused = state.riverwalkOpen;
+  game.paused = state.riverwalkOpen || state.alamoOpen;
   game.wantedLevel = state.wantedLevel;
   listeners.forEach((l) => l());
 }
@@ -53,8 +62,12 @@ export function connectHeist() {
     if (state.riverwalkOpen && !state.challenge) socket.emit('start_challenge', applySnapshot);
   });
   socket.on('disconnect', () => set({ connected: false }));
-  socket.on('car_state', (c) => set({ cash: c.loot, wantedLevel: c.wantedLevel, riverwalkCleared: c.riverwalkCleared }));
+  socket.on('car_state', (c) => set({
+    cash: c.loot, wantedLevel: c.wantedLevel, riverwalkCleared: c.riverwalkCleared,
+    alamoCleared: c.alamoCleared, alamoCode: c.alamoCode,
+  }));
   socket.on('challenge_state', applySnapshot);
+  socket.on('alamo_state', (snap) => set({ alamo: snap }));
   socket.on('alarm', (alarm) => {
     set({ alarm, wantedLevel: alarm.wantedLevel });
     alertPolice();
@@ -112,5 +125,60 @@ export function submitNfc(payload) {
     socket.timeout(5000).emit('nfc_scan', { payload }, (err, res) =>
       resolve(err ? { ok: false, error: 'Server did not respond.' } : res)
     );
+  });
+}
+
+// ---- Challenge 1: Alamo vault -------------------------------------------
+// Same arrive/leave popup pattern as the Riverwalk, but Phase 1 plays out on
+// the physical Pi/Arduino vault (this dashboard just mirrors it) while Phase
+// 2's code entry happens here, on the website.
+export function openAlamo(reason) {
+  if (state.alamoOpen) return;
+  car.v = 0;
+  Object.assign(input, { gas: 0, brake: 0, steer: 0 });
+  set({ alamoOpen: true, alamoOpenReason: reason });
+  if (!state.alamoCleared) socket?.emit('alamo_start');
+}
+
+export function closeAlamo() {
+  set({ alamoOpen: false });
+}
+
+export function alamoRequestHint() {
+  socket?.emit('alamo_request_hint');
+}
+
+/** Phase 2 code entry (from the website, not the Pi). Resolves {ok, correct}. */
+export function alamoSubmitCode(code) {
+  return new Promise((resolve) => {
+    if (!socket?.connected) return resolve({ ok: false, correct: false });
+    socket.emit('alamo_submit_code', { code }, (res) => resolve(res || { ok: false, correct: false }));
+  });
+}
+
+export function alamoAdminSkip() {
+  socket?.emit('alamo_admin_skip');
+}
+
+export function alamoAdminReset() {
+  socket?.emit('alamo_admin_reset');
+}
+
+/** Dev simulator standing in for the Pi: {device: 'joystick'|'light', value}. */
+export function alamoSimInput(device, value) {
+  socket?.emit('alamo_sim_input', { device, value });
+}
+
+export function alamoAdminShowSequence(show) {
+  return new Promise((resolve) => {
+    if (!socket?.connected) return resolve(null);
+    socket.emit('alamo_admin_show_sequence', { show }, (res) => resolve(res?.sequence ?? null));
+  });
+}
+
+export function alamoAdminShowCode(show) {
+  return new Promise((resolve) => {
+    if (!socket?.connected) return resolve(null);
+    socket.emit('alamo_admin_show_code', { show }, (res) => resolve(res?.code ?? null));
   });
 }

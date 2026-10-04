@@ -1,11 +1,13 @@
 import { useEffect } from 'react';
 import { car } from '../car/state.js';
 import { game } from '../game/runtime.js';
-import { connectHeist, disconnectHeist, getHeist, openRiverwalk, useHeist } from '../game/heist.js';
+import { connectHeist, disconnectHeist, getHeist, openRiverwalk, openAlamo, useHeist } from '../game/heist.js';
 import {
-  HEIST_DEV_TOOLS, MAX_WANTED_LEVEL, RIVERWALK_EXIT_RADIUS, RIVERWALK_POINT, RIVERWALK_TRIGGER_RADIUS,
+  ALAMO_EXIT_RADIUS, ALAMO_POINT, ALAMO_TRIGGER_RADIUS, HEIST_DEV_TOOLS, MAX_WANTED_LEVEL,
+  RIVERWALK_EXIT_RADIUS, RIVERWALK_POINT, RIVERWALK_TRIGGER_RADIUS,
 } from '../config/heistConfig.js';
 import RiverwalkChallenge from './RiverwalkChallenge.jsx';
+import AlamoChallenge from './AlamoChallenge.jsx';
 import './heist.css';
 
 const money = (n) => `$${(n || 0).toLocaleString()}`;
@@ -46,6 +48,22 @@ function useRiverwalkTrigger() {
   }, []);
 }
 
+// Same arrive/leave pattern as the Riverwalk, for Challenge 1 at the Alamo.
+function useAlamoTrigger() {
+  useEffect(() => {
+    let inside = false;
+    const id = setInterval(() => {
+      const d = Math.hypot(car.x - ALAMO_POINT.x, car.z - ALAMO_POINT.z);
+      const wasInside = inside;
+      inside = d < (inside ? ALAMO_EXIT_RADIUS : ALAMO_TRIGGER_RADIUS);
+      if (inside && !wasInside && game.started && !game.caught && !getHeist().alamoCleared) {
+        openAlamo('arrived');
+      }
+    }, 200);
+    return () => clearInterval(id);
+  }, []);
+}
+
 export default function HeistLayer({ videoRef }) {
   const heist = useHeist();
 
@@ -54,16 +72,23 @@ export default function HeistLayer({ videoRef }) {
     return disconnectHeist;
   }, []);
   useRiverwalkTrigger();
+  useAlamoTrigger();
 
   return (
     <>
       <HeistHud cash={heist.cash} wantedLevel={heist.wantedLevel} connected={heist.connected} />
-      {HEIST_DEV_TOOLS && !heist.riverwalkOpen && (
+      {HEIST_DEV_TOOLS && !heist.riverwalkOpen && !heist.alamoOpen && (
         <button className="heist-dev-open" onClick={() => openRiverwalk('dev')}>
           DEV: Force Open Riverwalk Challenge
         </button>
       )}
+      {HEIST_DEV_TOOLS && !heist.alamoOpen && !heist.riverwalkOpen && (
+        <button className="heist-dev-open" style={{ top: 140 }} onClick={() => openAlamo('dev')}>
+          DEV: Force Open Alamo Challenge
+        </button>
+      )}
       {heist.riverwalkOpen && <RiverwalkChallenge videoRef={videoRef} />}
+      {heist.alamoOpen && <AlamoChallenge />}
     </>
   );
 }
