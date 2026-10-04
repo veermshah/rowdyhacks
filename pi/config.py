@@ -37,6 +37,7 @@ JOYSTICK_SWAP_AXES = _bool("ALAMO_JOY_SWAP_AXES")
 JOYSTICK_INVERT_X = _bool("ALAMO_JOY_INVERT_X")
 JOYSTICK_INVERT_Y = _bool("ALAMO_JOY_INVERT_Y")
 TTS_COMMAND = os.getenv("ALAMO_TTS_COMMAND", "espeak-ng").strip()
+TTS_LEAD_IN_S = float(os.getenv("ALAMO_TTS_LEAD_IN_S", "0.6"))
 
 # Only re-emit the light reading once it moves by at least this much, so a
 # noisy ADC doesn't flood the socket every ~150ms.
