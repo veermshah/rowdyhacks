@@ -98,6 +98,15 @@ def _serial_loop():
             continue
 
         move = joystick.classify(reading["x"], reading["y"])
+        log.info(
+            "Sensors: X=%d Y=%d Light=%d Servo=%d Button=%s%s",
+            reading["x"],
+            reading["y"],
+            reading["light"],
+            reading["servo"],
+            "pressed" if reading["button"] else "released",
+            f" Move={move}" if move is not None else "",
+        )
         if move is not None:
             log.info("Joystick x=%d y=%d -> %s", reading["x"], reading["y"], move)
             if sio.connected:
