@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import {
   closeRiverwalk, devResetCar, devReplayRiverwalk, restartChallenge, sendFrame, simulate, submitNfc, useHeist,
 } from '../game/heist.js';
-import { HEIST_DEV_TOOLS, HEIST_SERVER_URL } from '../config/heistConfig.js';
+import { HEIST_DEV_TOOLS, PRESAGE_SERVER_URL, RIVERWALK_SERVER_URL } from '../config/heistConfig.js';
 
 const CLUE = 'Acknowledge the guard, signal twice, and look pleased.';
 // Each check stays a mystery until it's passed, so the list never gives away
@@ -218,9 +218,11 @@ export default function RiverwalkChallenge({ videoRef: sharedVideoRef }) {
           “{CLUE}”
         </blockquote>
 
-        {!heist.connected && (
-          <p className="rw-banner">Heist server offline at {HEIST_SERVER_URL}. Start it with <code>npm start</code> or <code>python app.py</code> in <code>/server</code>.</p>
-        )}
+        {!heist.riverwalkConnected && (PRESAGE_SERVER_URL ? (
+          <p className="rw-banner">Presage scanner offline at {RIVERWALK_SERVER_URL}. On the host laptop run <code>npm start</code> in <code>/server</code> and keep the Cloudflare tunnel open.</p>
+        ) : (
+          <p className="rw-banner">Heist server offline at {RIVERWALK_SERVER_URL}. Start it with <code>npm start</code> or <code>python app.py</code> in <code>/server</code>.</p>
+        ))}
 
         <div className="rw-body">
           <section className="rw-cam">
@@ -307,7 +309,7 @@ export default function RiverwalkChallenge({ videoRef: sharedVideoRef }) {
                 <button className="rw-btn rw-btn-ghost" onClick={closeRiverwalk}>Escape</button>
               </div>
             )}
-            {status === 'idle' && heist.connected && (
+            {status === 'idle' && heist.riverwalkConnected && (
               <button className="rw-btn rw-btn-wide" onClick={restartChallenge}>Start checkpoint</button>
             )}
             {(done || cleared) && (
@@ -322,12 +324,12 @@ export default function RiverwalkChallenge({ videoRef: sharedVideoRef }) {
                 <h3>DEV simulation</h3>
                 <div className="rw-dev-grid">
                   {DEV_ACTIONS.map(([action, label]) => (
-                    <button key={action} className={`rw-dev-btn ${action === 'fail' ? 'fail' : ''}`} onClick={() => simulate(action)} disabled={!heist.connected || cleared}>
+                    <button key={action} className={`rw-dev-btn ${action === 'fail' ? 'fail' : ''}`} onClick={() => simulate(action)} disabled={!heist.riverwalkConnected || cleared}>
                       {label}
                     </button>
                   ))}
-                  <button className="rw-dev-btn" onClick={devResetCar} disabled={!heist.connected}>Reset car loot</button>
-                  <button className="rw-dev-btn" onClick={devReplayRiverwalk} disabled={!heist.connected}>Replay (reset this run)</button>
+                  <button className="rw-dev-btn" onClick={devResetCar} disabled={!heist.riverwalkConnected}>Reset car loot</button>
+                  <button className="rw-dev-btn" onClick={devReplayRiverwalk} disabled={!heist.riverwalkConnected}>Replay (reset this run)</button>
                 </div>
                 <button className="rw-link" onClick={() => setShowSensors((v) => !v)}>
                   {showSensors ? 'Hide' : 'Show'} sensor readout

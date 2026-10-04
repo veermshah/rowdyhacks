@@ -1142,6 +1142,30 @@ def _apply_events(s, events, snap):
         broadcast_car(s.car_id)
 
 
+@socketio.on("riverwalk_complete")
+def on_riverwalk_complete(*_):
+    """The Riverwalk ran on the separate Presage (Node.js) face-scanning server
+    (the game opened with ?presage=<url>, e.g. a Cloudflare tunnel to a laptop).
+    The game relays the clear here so the payout lands on this car - one loot
+    total and wanted level shared with Alamo and Tower. Same once-per-car rule
+    as a Riverwalk run on this server."""
+    s = _session()
+    _apply_events(s, ["complete"], {"lastFailReason": None})
+    car = get_car(s.car_id)
+    return {"ok": True, "loot": car.loot, "wantedLevel": car.wanted_level, "riverwalkCleared": car.riverwalk_cleared}
+
+
+@socketio.on("riverwalk_alarm")
+def on_riverwalk_alarm(data=None):
+    """Three failed attempts on the separate Presage server: raise this car's
+    wanted level and broadcast the alarm (alerts the police in the game), same
+    as an alarm in a Riverwalk run on this server."""
+    s = _session()
+    reason = (data or {}).get("reason") if isinstance(data, dict) else None
+    _apply_events(s, ["alarm"], {"lastFailReason": str(reason or "Security alarm")[:120]})
+    return {"ok": True, "wantedLevel": get_car(s.car_id).wanted_level}
+
+
 @socketio.on("simulate")
 def on_simulate(data):
     """Dev buttons: {"action": "face" | "nod" | "blink" | "smile" | "fail"}."""

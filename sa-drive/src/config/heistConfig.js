@@ -12,6 +12,16 @@ const serverParam = typeof window !== 'undefined' ? new URLSearchParams(window.l
 const defaultServerUrl = env.DEV ? 'http://localhost:5000' : 'https://lootrun-server-haht.onrender.com';
 export const HEIST_SERVER_URL = serverParam || env.VITE_HEIST_SERVER_URL || defaultServerUrl;
 
+// Optional separate Presage (Node.js) face-scanning server for the Riverwalk
+// only - e.g. a laptop exposed through a Cloudflare tunnel:
+//   https://rowdyhacks-green.vercel.app/?presage=https://<name>.trycloudflare.com
+// Riverwalk frames/checklist then go there; loot, wanted level, Alamo and Tower
+// stay on HEIST_SERVER_URL, which is also told about the clear so the payout
+// lands in the one shared total. Unset = everything on HEIST_SERVER_URL.
+const presageParam = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('presage') : null;
+export const PRESAGE_SERVER_URL = (presageParam || env.VITE_PRESAGE_SERVER_URL || '').replace(/\/+$/, '') || null;
+export const RIVERWALK_SERVER_URL = PRESAGE_SERVER_URL || HEIST_SERVER_URL;
+
 // Dev-only UI inside the popup (Simulate buttons, sensor readout). On in
 // `npm run dev`, off in production builds unless VITE_HEIST_DEV_TOOLS=true.
 export const HEIST_DEV_TOOLS = !!env.DEV || env.VITE_HEIST_DEV_TOOLS === 'true';

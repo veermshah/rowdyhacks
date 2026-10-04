@@ -4,7 +4,7 @@
 // bits the driving game needs (pause, wanted level) into `game`.
 import { useSyncExternalStore } from 'react';
 import { io } from 'socket.io-client';
-import { HEIST_SERVER_URL } from '../config/heistConfig.js';
+import { HEIST_SERVER_URL, PRESAGE_SERVER_URL } from '../config/heistConfig.js';
 import { car } from '../car/state.js';
 import { input } from '../input/input.js';
 import { game, alertPolice } from './runtime.js';
@@ -13,6 +13,7 @@ const carId = new URLSearchParams(window.location.search).get('car') || 'solo';
 
 let state = {
   connected: false,
+  riverwalkConnected: false, // the server running the Riverwalk (Presage server if ?presage= is set)
   carId,
   cash: 0,
   wantedLevel: 0,
@@ -42,6 +43,10 @@ let state = {
 };
 const listeners = new Set();
 let socket = null;
+// Riverwalk-only connection to a separate Presage server (PRESAGE_SERVER_URL,
+// e.g. a laptop behind a Cloudflare tunnel). Null = the Riverwalk uses `socket`.
+let presageSocket = null;
+const riverwalkSocket = () => presageSocket ?? socket;
 
 function set(patch) {
   state = { ...state, ...patch };
@@ -65,17 +70,17 @@ export function connectHeist() {
   if (socket) return;
   socket = io(HEIST_SERVER_URL, { transports: ['websocket', 'polling'] });
   socket.on('connect', () => {
-    set({ connected: true });
+    set(presageSocket ? { connected: true } : { connected: true, riverwalkConnected: true });
     socket.emit('join_car', { carId, role: 'driver' });
-    if (state.riverwalkOpen && !state.challenge) socket.emit('start_challenge', applySnapshot);
+    if (!presageSocket && state.riverwalkOpen && !state.challenge) socket.emit('start_challenge', applySnapshot);
   });
-  socket.on('disconnect', () => set({ connected: false }));
+  socket.on('disconnect', () => set(presageSocket ? { connected: false } : { connected: false, riverwalkConnected: false }));
   socket.on('car_state', (c) => set({
     cash: c.loot, wantedLevel: c.wantedLevel, riverwalkCleared: c.riverwalkCleared,
     alamoCleared: c.alamoCleared, alamoCode: c.alamoCode,
     towerCleared: c.towerCleared, towerCode: c.towerCode,
   }));
-  socket.on('challenge_state', applySnapshot);
+  socket.on('challenge_state', (snap) => { if (!presageSocket) applySnapshot(snap); });
   socket.on('alamo_state', (snap) => set({ alamo: snap }));
   socket.on('tower_state', (snap) => set({ tower: snap }));
   socket.on('alarm', (alarm) => {
@@ -83,12 +88,44 @@ export function connectHeist() {
     alertPolice();
   });
   socket.on('reward', (reward) => set({ lastReward: reward, cash: reward.loot, wantedLevel: reward.wantedLevel ?? state.wantedLevel }));
+
+  if (PRESAGE_SERVER_URL) connectPresage();
+}
+
+// Riverwalk on the Presage server. Its outcomes are relayed to the main server
+// so loot and wanted level stay in the one shared total (and Alamo/Tower see them).
+function connectPresage() {
+  presageSocket = io(PRESAGE_SERVER_URL, {
+    // Start on HTTP long-polling and upgrade to WebSocket when the tunnel allows
+    // it. ngrok's free plan answers browser requests with a warning page unless
+    // this header is sent - possible on polling requests (browsers can't add
+    // headers to WebSockets), so polling keeps working either way.
+    transports: ['polling', 'websocket'],
+    extraHeaders: { 'ngrok-skip-browser-warning': '1' },
+  });
+  presageSocket.on('connect', () => {
+    set({ riverwalkConnected: true });
+    presageSocket.emit('join_car', { carId, role: 'driver' });
+    if (state.riverwalkOpen && !state.challenge) presageSocket.emit('start_challenge', applySnapshot);
+  });
+  presageSocket.on('disconnect', () => set({ riverwalkConnected: false }));
+  presageSocket.on('challenge_state', applySnapshot);
+  // Cleared on the Presage server: the main server pays out (once per car) and
+  // broadcasts 'reward' + 'car_state', which update the HUD.
+  presageSocket.on('reward', (reward) => {
+    if (reward?.source === 'riverwalk_vault') socket?.emit('riverwalk_complete');
+  });
+  // Three failed attempts: the main server raises the wanted level and
+  // broadcasts 'alarm', which alerts the police.
+  presageSocket.on('alarm', (alarm) => socket?.emit('riverwalk_alarm', { reason: alarm?.reason }));
 }
 
 export function disconnectHeist() {
   socket?.disconnect();
   socket = null;
-  set({ connected: false });
+  presageSocket?.disconnect();
+  presageSocket = null;
+  set({ connected: false, riverwalkConnected: false });
 }
 
 export function openRiverwalk(reason) {
@@ -97,35 +134,37 @@ export function openRiverwalk(reason) {
   car.v = 0;
   Object.assign(input, { gas: 0, brake: 0, steer: 0 });
   set({ riverwalkOpen: true, openReason: reason, alarm: null, lastReward: null, challenge: null });
-  if (!state.riverwalkCleared) socket?.emit('start_challenge', applySnapshot);
+  if (!state.riverwalkCleared) riverwalkSocket()?.emit('start_challenge', applySnapshot);
 }
 
 export function closeRiverwalk() {
   set({ riverwalkOpen: false });
-  socket?.emit('leave_checkpoint'); // free the Presage scanner for other players
+  riverwalkSocket()?.emit('leave_checkpoint'); // free the Presage scanner for other players
 }
 
 export function restartChallenge() {
   set({ alarm: null });
-  socket?.emit('start_challenge', applySnapshot);
+  riverwalkSocket()?.emit('start_challenge', applySnapshot);
 }
 
 export function simulate(action) {
-  socket?.emit('simulate', { action }, applySnapshot);
+  riverwalkSocket()?.emit('simulate', { action }, applySnapshot);
 }
 
 /** Dev: wipe this run's heist (loot, wanted level, vault) and restart the checkpoint; the popup stays open. */
 export function devReplayRiverwalk() {
+  presageSocket?.emit('reset_car');
   socket?.emit('reset_car', () => {
     set({ alarm: null, lastReward: null, challenge: null, cash: 0, wantedLevel: 0, riverwalkCleared: false });
-    socket?.emit('start_challenge', applySnapshot);
+    riverwalkSocket()?.emit('start_challenge', applySnapshot);
   });
 }
 
 export function devResetCar() {
+  presageSocket?.emit('reset_car');
   socket?.emit('reset_car', () => {
     set({ alarm: null, lastReward: null, challenge: null });
-    if (state.riverwalkOpen) socket?.emit('start_challenge', applySnapshot);
+    if (state.riverwalkOpen) riverwalkSocket()?.emit('start_challenge', applySnapshot);
   });
 }
 
@@ -145,6 +184,7 @@ export function resetHeistRun() {
     towerOpen: false, towerCleared: false, towerCode: null, tower: null,
   });
   socket?.emit('reset_car');
+  presageSocket?.emit('reset_car');
 }
 
 /**
@@ -152,8 +192,9 @@ export function resetHeistRun() {
  * arrival). Calls done() when the server has answered (or timed out).
  */
 export function sendFrame(buf, done) {
-  if (!socket?.connected) return done();
-  socket.timeout(3000).emit('frame', { image: buf }, (err, snap) => {
+  const rs = riverwalkSocket();
+  if (!rs?.connected) return done();
+  rs.timeout(3000).emit('frame', { image: buf }, (err, snap) => {
     if (!err) applySnapshot(snap);
     done();
   });

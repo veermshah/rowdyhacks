@@ -185,6 +185,32 @@ def test_completion_awards_cash_and_wanted_level():
     client.disconnect()
 
 
+def test_riverwalk_complete_from_presage_server_credits_car_once():
+    """The game relays a clear from the separate Presage server (?presage=...)."""
+    client = server.socketio.test_client(server.app)
+    client.emit("join_car", {"carId": "car-presage-relay"}, callback=True)
+    res = client.emit("riverwalk_complete", callback=True)
+    assert res == {"ok": True, "loot": server.RIVERWALK_REWARD, "wantedLevel": 1, "riverwalkCleared": True}
+    rewards = [m for m in client.get_received() if m["name"] == "reward"]
+    assert rewards and rewards[-1]["args"][0]["amount"] == server.RIVERWALK_REWARD
+
+    # A second relay (or a replay) pays nothing more; a game restart re-locks it.
+    assert client.emit("riverwalk_complete", callback=True)["loot"] == server.RIVERWALK_REWARD
+    client.emit("reset_car", callback=True)
+    assert client.emit("riverwalk_complete", callback=True)["loot"] == server.RIVERWALK_REWARD
+    client.disconnect()
+
+
+def test_riverwalk_alarm_from_presage_server_raises_wanted_level():
+    client = server.socketio.test_client(server.app)
+    client.emit("join_car", {"carId": "car-presage-alarm"}, callback=True)
+    res = client.emit("riverwalk_alarm", {"reason": "Too slow!"}, callback=True)
+    assert res == {"ok": True, "wantedLevel": 1}
+    alarms = [m for m in client.get_received() if m["name"] == "alarm"]
+    assert alarms and alarms[-1]["args"][0] == {"reason": "Too slow!", "wantedLevel": 1}
+    client.disconnect()
+
+
 def test_alarm_raises_wanted_level_via_socket():
     client = server.socketio.test_client(server.app)
     client.emit("join_car", {"carId": "car-alarm"}, callback=True)
