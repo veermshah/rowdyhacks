@@ -13,7 +13,7 @@ browser-pursuit.cjs
 .env.*
 !.env.example
 
-# Python (Riverwalk server)
+# Python (Alamo server)
 __pycache__/
 *.pyc
 server/.venv/

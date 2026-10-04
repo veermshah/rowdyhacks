@@ -74,7 +74,9 @@ MAX_FRAME_BYTES = 512 * 1024
 NFC_MAX_AMOUNT = 10_000
 NFC_SECRET = os.environ.get("NFC_SECRET", "")
 PRESAGE_API_KEY = os.environ.get("PRESAGE_API_KEY", "")
-# Enables the simulate / dev_reset_car socket events. Set RIVERWALK_DEV_MODE=0 in production.
+# Enables the simulate socket event (and Alamo's admin/sim events further down).
+# Set RIVERWALK_DEV_MODE=0 in production. reset_car is NOT gated by this - it's
+# core gameplay (every player restart), not a dev-only tool.
 DEV_MODE = os.environ.get("RIVERWALK_DEV_MODE", "1") != "0"
 
 STEPS = ["face", "nod", "blink", "smile"]
@@ -914,14 +916,17 @@ def on_simulate(data):
     return snap
 
 
-@socketio.on("dev_reset_car")
-def on_dev_reset_car(*_):
-    """Dev: zero this car's loot/wanted level and re-lock the vault so it can be replayed."""
-    if not DEV_MODE:
-        return {"error": "dev mode disabled"}
+@socketio.on("reset_car")
+def on_reset_car(*_):
+    """Zeroes this car's loot/wanted level and re-locks both vaults so the
+    whole heist can be replayed. Not DEV_MODE-gated: the frontend calls this
+    on every player-triggered game restart (R after being caught), not just
+    from a dev button - see useRiverwalkTrigger's epoch handling in
+    sa-drive/src/heist/HeistLayer.jsx."""
     s = _session()
     with state_lock:
         cars[s.car_id] = CarState()
+        alamo_challenges[s.car_id] = AlamoChallenge()
     with s.lock:
         s.challenge = RiverwalkChallenge()
     broadcast_car(s.car_id)

@@ -92,6 +92,7 @@ export function openRiverwalk(reason) {
 
 export function closeRiverwalk() {
   set({ riverwalkOpen: false });
+  socket?.emit('leave_checkpoint'); // free the Presage scanner for other players
 }
 
 export function restartChallenge() {
@@ -103,35 +104,34 @@ export function simulate(action) {
   socket?.emit('simulate', { action }, applySnapshot);
 }
 
-export function devResetCar() {
-  socket?.emit('dev_reset_car', () => {
-    set({ alarm: null, lastReward: null, challenge: null });
-    if (state.riverwalkOpen) socket?.emit('start_challenge', applySnapshot);
+/** Dev: wipe this run's heist (loot, wanted level, vault) and restart the checkpoint; the popup stays open. */
+export function devReplayRiverwalk() {
+  socket?.emit('reset_car', () => {
+    set({ alarm: null, lastReward: null, challenge: null, cash: 0, wantedLevel: 0, riverwalkCleared: false });
+    socket?.emit('start_challenge', applySnapshot);
   });
 }
 
-/** Send one JPEG frame; calls done() when the server has answered (or timed out). */
+/** New run (game restarted): close the popup and wipe this car's loot, wanted level and vault. */
+export function resetHeistRun() {
+  set({ riverwalkOpen: false, alarm: null, lastReward: null, challenge: null, cash: 0, wantedLevel: 0, riverwalkCleared: false });
+  socket?.emit('reset_car');
+}
+
+/**
+ * Send one JPEG frame to the Presage scanner (the server timestamps it on
+ * arrival). Calls done() when the server has answered (or timed out).
+ */
 export function sendFrame(buf, done) {
   if (!socket?.connected) return done();
-  socket.timeout(3000).emit('frame', buf, (err, snap) => {
+  socket.timeout(3000).emit('frame', { image: buf }, (err, snap) => {
     if (!err) applySnapshot(snap);
     done();
   });
 }
 
-export function submitNfc(payload) {
-  return new Promise((resolve) => {
-    if (!socket?.connected) return resolve({ ok: false, error: 'Heist server offline.' });
-    socket.timeout(5000).emit('nfc_scan', { payload }, (err, res) =>
-      resolve(err ? { ok: false, error: 'Server did not respond.' } : res)
-    );
-  });
-}
+// ── Alamo vault challenge ──────────────────────────────────────────────
 
-// ---- Challenge 1: Alamo vault -------------------------------------------
-// Same arrive/leave popup pattern as the Riverwalk, but Phase 1 plays out on
-// the physical Pi/Arduino vault (this dashboard just mirrors it) while Phase
-// 2's code entry happens here, on the website.
 export function openAlamo(reason) {
   if (state.alamoOpen) return;
   car.v = 0;
@@ -182,3 +182,4 @@ export function alamoAdminShowCode(show) {
     socket.emit('alamo_admin_show_code', { show }, (res) => resolve(res?.code ?? null));
   });
 }
+

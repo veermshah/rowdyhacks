@@ -176,11 +176,11 @@ def test_completion_awards_cash_and_wanted_level():
     assert (car.loot, car.wanted_level, car.riverwalk_cleared) == (server.RIVERWALK_REWARD, 1, True)
     assert server.RIVERWALK_REWARD == 5000
 
-    # Replaying a cleared vault pays nothing more; dev reset re-locks it.
+    # Replaying a cleared vault pays nothing more; a reset re-locks it.
     for action in ("face", "nod", "blink", "blink", "smile"):
         client.emit("simulate", {"action": action}, callback=True)
     assert (car.loot, car.wanted_level) == (5000, 1)
-    assert client.emit("dev_reset_car", callback=True) == {"ok": True}
+    assert client.emit("reset_car", callback=True) == {"ok": True}
     assert server.get_car("car-reward").loot == 0
     client.disconnect()
 
