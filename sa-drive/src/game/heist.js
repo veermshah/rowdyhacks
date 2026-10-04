@@ -31,13 +31,21 @@ let state = {
   alamoOpen: false,
   alamoOpenReason: null, // 'arrived' | 'dev'
   alamo: null, // latest `alamo_state` snapshot ({substage, route, hintsScreen, ...})
+  // Challenge 3 - Tower. The crew phones the bank's voice agent; the server
+  // sends a one-time code to the vault LCD and the crew keys it in on the
+  // joystick. This dashboard is a read-only view (the code is never sent here).
+  towerCleared: false,
+  towerCode: null,
+  towerOpen: false,
+  towerOpenReason: null, // 'arrived' | 'dev'
+  tower: null, // latest `tower_state` snapshot ({substage, otpStatus, otpRemainingS, ...})
 };
 const listeners = new Set();
 let socket = null;
 
 function set(patch) {
   state = { ...state, ...patch };
-  game.paused = state.riverwalkOpen || state.alamoOpen;
+  game.paused = state.riverwalkOpen || state.alamoOpen || state.towerOpen;
   game.wantedLevel = state.wantedLevel;
   listeners.forEach((l) => l());
 }
@@ -65,9 +73,11 @@ export function connectHeist() {
   socket.on('car_state', (c) => set({
     cash: c.loot, wantedLevel: c.wantedLevel, riverwalkCleared: c.riverwalkCleared,
     alamoCleared: c.alamoCleared, alamoCode: c.alamoCode,
+    towerCleared: c.towerCleared, towerCode: c.towerCode,
   }));
   socket.on('challenge_state', applySnapshot);
   socket.on('alamo_state', (snap) => set({ alamo: snap }));
+  socket.on('tower_state', (snap) => set({ tower: snap }));
   socket.on('alarm', (alarm) => {
     set({ alarm, wantedLevel: alarm.wantedLevel });
     alertPolice();
@@ -130,7 +140,10 @@ export function submitNfc(payload) {
 
 /** New run (game restarted): close the popup and wipe this car's loot, wanted level and vault. */
 export function resetHeistRun() {
-  set({ riverwalkOpen: false, alarm: null, lastReward: null, challenge: null, cash: 0, wantedLevel: 0, riverwalkCleared: false });
+  set({
+    riverwalkOpen: false, alarm: null, lastReward: null, challenge: null, cash: 0, wantedLevel: 0, riverwalkCleared: false,
+    towerOpen: false, towerCleared: false, towerCode: null, tower: null,
+  });
   socket?.emit('reset_car');
 }
 
@@ -199,3 +212,55 @@ export function alamoAdminShowCode(show) {
   });
 }
 
+// ── Tower challenge (Challenge 3) ──────────────────────────────────────
+
+export function openTower(reason) {
+  if (state.towerOpen) return;
+  car.v = 0;
+  Object.assign(input, { gas: 0, brake: 0, steer: 0 });
+  set({ towerOpen: true, towerOpenReason: reason });
+  if (!state.towerCleared) socket?.emit('tower_start');
+}
+
+export function closeTower() {
+  set({ towerOpen: false });
+}
+
+export function towerAdminSkip() {
+  socket?.emit('tower_admin_skip');
+}
+
+export function towerAdminReset() {
+  socket?.emit('tower_admin_reset');
+}
+
+/** Dev simulator standing in for the Pi: {device: 'joystick'|'button', value}. */
+export function towerSimInput(device, value) {
+  socket?.emit('tower_sim_input', { device, value });
+}
+
+/** Dev: the live one-time code (DEV_MODE servers only), for the dev panel. */
+export function towerAdminShowCode(show) {
+  return new Promise((resolve) => {
+    if (!socket?.connected) return resolve(null);
+    socket.emit('tower_admin_show_code', { show }, (res) => resolve(res?.code ?? null));
+  });
+}
+
+/**
+ * Dev: calls one of Margaret's webhook tools exactly as ElevenLabs would
+ * (POST /api/tower/<path>), so the whole server path gets exercised without a
+ * phone. Resolves {status, body}. Servers with TOWER_WEBHOOK_SECRET set will 401.
+ */
+export async function towerDevWebhook(path, body = {}) {
+  try {
+    const res = await fetch(`${HEIST_SERVER_URL}/api/tower/${path}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ carId, ...body }),
+    });
+    return { status: res.status, body: await res.json().catch(() => null) };
+  } catch {
+    return { status: 0, body: null };
+  }
+}

@@ -30,6 +30,8 @@ from flask_socketio import SocketIO, emit, join_room
 
 from alamo_challenge import AlamoChallenge
 from download_assets import MODELS_DIR, ensure_assets
+from tower_challenge import TowerChallenge
+from tower_config import TOWER_REWARD, TOWER_WANTED_ON_ALARM, TOWER_WANTED_ON_CLEAR
 
 try:
     from dotenv import load_dotenv
@@ -74,6 +76,9 @@ MAX_FRAME_BYTES = 512 * 1024
 NFC_MAX_AMOUNT = 10_000
 NFC_SECRET = os.environ.get("NFC_SECRET", "")
 PRESAGE_API_KEY = os.environ.get("PRESAGE_API_KEY", "")
+# Optional shared secret for Margaret's webhook tools (/api/tower/*): when set,
+# requests must carry it in an X-Tower-Secret header.
+TOWER_WEBHOOK_SECRET = os.environ.get("TOWER_WEBHOOK_SECRET", "")
 # Enables the simulate socket event (and Alamo's admin/sim events further down).
 # Set RIVERWALK_DEV_MODE=0 in production. reset_car is NOT gated by this - it's
 # core gameplay (every player restart), not a dev-only tool.
@@ -489,12 +494,15 @@ class CarState:
     riverwalk_cleared: bool = False
     alamo_cleared: bool = False
     alamo_code: str = None   # the Alamo vault's spoken keyword, set once on ALAMO_DONE
+    tower_cleared: bool = False
+    tower_code: str = None   # the Tower's spent one-time code, set once on TOWER_DONE (never before)
     claimed_tags: set = field(default_factory=set)
 
     def to_dict(self, car_id):
         return {"carId": car_id, "loot": self.loot, "wantedLevel": self.wanted_level,
                 "riverwalkCleared": self.riverwalk_cleared,
-                "alamoCleared": self.alamo_cleared, "alamoCode": self.alamo_code}
+                "alamoCleared": self.alamo_cleared, "alamoCode": self.alamo_code,
+                "towerCleared": self.tower_cleared, "towerCode": self.tower_code}
 
 
 def sign_nfc_payload(tag_id, amount):
@@ -591,6 +599,12 @@ state_lock = threading.Lock()
 alamo_challenges = {}
 _alamo_loop_started = False
 
+# Same for the Tower (Challenge 3). Unlike Alamo, every call into a
+# TowerChallenge is made under state_lock, because Margaret's webhook requests
+# (Flask worker threads) race the Pi's `input` events and the tick loop.
+tower_challenges = {}
+_tower_loop_started = False
+
 
 def get_car(car_id):
     with state_lock:
@@ -674,6 +688,89 @@ def _alamo_tick_loop():
         _sleep(0.1)
 
 
+def get_tower(car_id):
+    global _tower_loop_started
+    with state_lock:
+        ch = tower_challenges.setdefault(car_id, TowerChallenge())
+        if not _tower_loop_started:
+            _tower_loop_started = True
+            threading.Thread(target=_tower_tick_loop, daemon=True).start()
+    return ch
+
+
+def _apply_tower_events(car_id, events, ch):
+    """Side effects of Tower events on the shared car (both players see them).
+    Must be called WITHOUT state_lock held (it takes it, and threading.Lock
+    isn't reentrant)."""
+    car = get_car(car_id)
+    room = f"car:{car_id}"
+    if "alarm" in events:
+        with state_lock:
+            car.wanted_level = min(MAX_WANTED_LEVEL, car.wanted_level + TOWER_WANTED_ON_ALARM)
+            wanted = car.wanted_level
+        socketio.emit("alarm", {"reason": ch.alarm_reason, "wantedLevel": wanted}, to=room)
+        broadcast_car(car_id)
+    if "done" in events:
+        # Cash and heat are awarded once per car; a cleared vault stays cleared.
+        with state_lock:
+            first = not car.tower_cleared
+            car.tower_cleared = True
+            if first:
+                car.tower_code = ch.verified_code
+                car.loot += TOWER_REWARD
+                car.wanted_level = min(MAX_WANTED_LEVEL, car.wanted_level + TOWER_WANTED_ON_CLEAR)
+            loot, wanted = car.loot, car.wanted_level
+        socketio.emit("reward", {"source": "tower_vault", "amount": TOWER_REWARD if first else 0,
+                                 "loot": loot, "wantedLevel": wanted}, to=room)
+        broadcast_car(car_id)
+
+
+_tower_last_snapshot = {}  # car_id -> last emitted general snapshot, to dedupe the 10Hz tick loop
+
+
+def _flush_tower(car_id, ch):
+    """Sends queued Pi commands and pushes fresh state to the car/hacker rooms
+    (deduped like _flush_alamo)."""
+    now = time.monotonic()
+    with state_lock:
+        cmds = ch.pop_cmds()
+        snap = ch.snapshot(now)
+        hacker_snap = ch.snapshot(now, include_hacker=True)
+    for cmd in cmds:
+        socketio.emit("cmd", cmd, to=f"car:{car_id}:pi")
+    if cmds or snap != _tower_last_snapshot.get(car_id):
+        _tower_last_snapshot[car_id] = snap
+        socketio.emit("tower_state", snap, to=f"car:{car_id}")
+        socketio.emit("tower_state", hacker_snap, to=f"car:{car_id}:hacker")
+
+
+def _tower_run(car_id, fn):
+    """Runs fn(ch) -> (result, events) under state_lock, then applies the
+    events and flushes. Every TowerChallenge call goes through here."""
+    ch = get_tower(car_id)
+    with state_lock:
+        result, events = fn(ch)
+    _apply_tower_events(car_id, events, ch)
+    _flush_tower(car_id, ch)
+    return result
+
+
+def _tower_tick_loop():
+    """Server-side timers: the on-screen code timeout and the OTP expiry keep
+    advancing even when the Pi isn't sending anything."""
+    while True:
+        with state_lock:
+            items = list(tower_challenges.items())
+        for car_id, ch in items:
+            with state_lock:
+                if not ch.active:
+                    continue
+                events = ch.tick(time.monotonic())
+            _apply_tower_events(car_id, events, ch)
+            _flush_tower(car_id, ch)
+        _sleep(0.1)
+
+
 def _session():
     s = sessions.get(request.sid)
     if s is None:
@@ -737,6 +834,10 @@ def on_join_car(data):
     now = time.monotonic()
     ch = get_alamo(car_id)
     emit("alamo_state", ch.snapshot(now, include_hacker=is_hacker))
+    tower = get_tower(car_id)
+    with state_lock:
+        tower_snap = tower.snapshot(now, include_hacker=is_hacker)
+    emit("tower_state", tower_snap)
     return {"ok": True}
 
 
@@ -745,20 +846,26 @@ def on_join_car(data):
 # --------------------------------------------------------------------------- #
 @socketio.on("input")
 def on_input(data):
-    """Raspberry Pi relay: {"device": "joystick"|"light", "value": ...}.
+    """Raspberry Pi relay: {"device": "joystick"|"light"|"button", "value": ...}.
 
-    This is the fixed Pi wire protocol; AlamoChallenge itself ignores input
-    whenever no run is active, so this handler doesn't need to gate on substage.
+    This is the fixed Pi wire protocol; the challenges themselves ignore input
+    whenever they're not in a substage that wants it, so this handler doesn't
+    need to gate on substage. The vault is shared: joystick moves go to BOTH
+    the Alamo and the Tower, the light sensor to the Alamo, the joystick
+    button (code submit) to the Tower.
     """
     s = _session()
     device = (data or {}).get("device")
     value = (data or {}).get("value")
-    if device not in ("joystick", "light"):
+    if device not in ("joystick", "light", "button"):
         return {"error": f"unknown device {device!r}"}
-    ch = get_alamo(s.car_id)
-    events = ch.handle_input(device, value, time.monotonic())
-    _apply_alamo_events(s.car_id, events, ch)
-    _flush_alamo(s.car_id, ch)
+    if device != "button":
+        ch = get_alamo(s.car_id)
+        events = ch.handle_input(device, value, time.monotonic())
+        _apply_alamo_events(s.car_id, events, ch)
+        _flush_alamo(s.car_id, ch)
+    if device != "light":
+        _tower_run(s.car_id, lambda t: (None, t.handle_input(device, value, time.monotonic())))
     return {"ok": True}
 
 
@@ -846,6 +953,142 @@ def on_alamo_sim_input(data):
     return on_input(data)
 
 
+# --------------------------------------------------------------------------- #
+# Tower challenge (Challenge 3): shared vault rig + Margaret's webhook tools
+# --------------------------------------------------------------------------- #
+@socketio.on("tower_start")
+def on_tower_start(*_):
+    """Call when the crew reaches Challenge 3. A no-op while a run is in
+    progress (a reconnecting client can't wipe it); a tripped alarm starts a
+    fresh attempt, like the Riverwalk. Use tower_admin_reset to force one."""
+    s = _session()
+    _tower_run(s.car_id, lambda t: (None, [] if t.active and t.status != "alarm" else t.start(time.monotonic())))
+    return {"ok": True}
+
+
+@socketio.on("tower_admin_skip")
+def on_tower_admin_skip(*_):
+    """Dev: jump straight to TOWER_DONE."""
+    if not DEV_MODE:
+        return {"error": "dev mode disabled"}
+    s = _session()
+    _tower_run(s.car_id, lambda t: (None, t.skip(time.monotonic())))
+    return {"ok": True}
+
+
+@socketio.on("tower_admin_reset")
+def on_tower_admin_reset(*_):
+    """Dev: restart the Tower run."""
+    if not DEV_MODE:
+        return {"error": "dev mode disabled"}
+    s = _session()
+    _tower_run(s.car_id, lambda t: (None, t.reset(time.monotonic())))
+    return {"ok": True}
+
+
+@socketio.on("tower_admin_show_code")
+def on_tower_admin_show_code(data):
+    """Dev: {"show": bool} -> the live one-time code, for the hidden dev panel
+    (the one place besides the vault LCD it can be read; DEV_MODE only)."""
+    if not DEV_MODE:
+        return {"error": "dev mode disabled"}
+    s = _session()
+    ch = get_tower(s.car_id)
+    show = bool((data or {}).get("show"))
+    with state_lock:
+        code = ch.otp if show else None
+    return {"ok": True, "code": code}
+
+
+@socketio.on("tower_sim_input")
+def on_tower_sim_input(data):
+    """Dev simulator (stands in for the Pi's joystick/button): same shape as a
+    real `input` event, so it exercises the exact same code path."""
+    if not DEV_MODE:
+        return {"error": "dev mode disabled"}
+    return on_input(data)
+
+
+def _tower_webhook_args():
+    """(car_id, body) for a Margaret webhook call, or (None, None) if the
+    optional shared secret is set and missing/wrong."""
+    if TOWER_WEBHOOK_SECRET and not hmac.compare_digest(
+        request.headers.get("X-Tower-Secret", ""), TOWER_WEBHOOK_SECRET
+    ):
+        return None, None
+    body = request.get_json(silent=True)
+    body = body if isinstance(body, dict) else {}
+    car_id = str(body.get("carId") or request.args.get("carId") or "solo")[:40]
+    return car_id, body
+
+
+def _text(body, key, limit=200):
+    return str(body.get(key) or "")[:limit]
+
+
+def _unauthorized():
+    return jsonify(result="unauthorized"), 401
+
+
+@app.post("/api/tower/send-otp")
+def tower_send_otp():
+    """{} -> {"result": "code sent"}. The code goes to the vault LCD only and is
+    NEVER in this response."""
+    car_id, body = _tower_webhook_args()
+    if body is None:
+        return _unauthorized()
+    result = _tower_run(car_id, lambda t: t.agent_send_otp(time.monotonic()))
+    return jsonify(result=result)
+
+
+@app.route("/api/tower/check-otp", methods=["GET", "POST"])
+def tower_check_otp():
+    """{} -> {"result": "OTP VERIFIED" | "OTP FAILED - ..." | "OTP PENDING" |
+    "OTP NOT SENT"}. Read-only; tells Margaret how the joystick entry went
+    without ever revealing the code."""
+    car_id, body = _tower_webhook_args()
+    if body is None:
+        return _unauthorized()
+    result = _tower_run(car_id, lambda t: (t.agent_check_otp(time.monotonic()), []))
+    return jsonify(result=result)
+
+
+@app.post("/api/tower/raise-suspicion")
+def tower_raise_suspicion():
+    """{"amount": 25, "reason": "..."} -> {"result": "noted"|"alarm triggered"}"""
+    car_id, body = _tower_webhook_args()
+    if body is None:
+        return _unauthorized()
+    result = _tower_run(car_id, lambda t: t.agent_raise_suspicion(body.get("amount"), _text(body, "reason"), time.monotonic()))
+    return jsonify(result=result)
+
+
+@app.post("/api/tower/approve-transfer")
+def tower_approve_transfer():
+    """{"amount": 12000} -> 200 {"result": "approved ...", "amount"} or 403
+    {"result": "not verified"} unless the code was already entered correctly
+    on the vault joystick."""
+    car_id, body = _tower_webhook_args()
+    if body is None:
+        return _unauthorized()
+    ok, message, amount = _tower_run(
+        car_id, lambda t: (t.agent_approve_transfer(body.get("amount"), time.monotonic()), [])
+    )
+    if not ok:
+        return jsonify(result=message), 403
+    return jsonify(result=message, amount=amount)
+
+
+@app.post("/api/tower/trigger-alarm")
+def tower_trigger_alarm():
+    """{"reason": "..."} -> {"result": "alarm triggered"}"""
+    car_id, body = _tower_webhook_args()
+    if body is None:
+        return _unauthorized()
+    result = _tower_run(car_id, lambda t: t.agent_trigger_alarm(_text(body, "reason"), time.monotonic()))
+    return jsonify(result=result)
+
+
 @socketio.on("start_challenge")
 def on_start(*_):
     s = _session()
@@ -927,6 +1170,7 @@ def on_reset_car(*_):
     with state_lock:
         cars[s.car_id] = CarState()
         alamo_challenges[s.car_id] = AlamoChallenge()
+        tower_challenges[s.car_id] = TowerChallenge()
     with s.lock:
         s.challenge = RiverwalkChallenge()
     broadcast_car(s.car_id)
