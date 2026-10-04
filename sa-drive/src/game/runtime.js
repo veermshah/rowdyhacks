@@ -7,7 +7,8 @@ import { input } from '../input/input.js';
 import { destinations,navigation } from '../config/navigation.js';
 import { calculateRoute,routeProgress,clearSegment,nearestEdge,policeSpawn } from '../lib/roadGraph.js';
 import { overlapsBuilding } from '../lib/collision.js';
-export const game={player:car,ready:false,started:false,caught:false,distance:0,epoch:0,spawn:null,anchor:null,graceRemaining:PURSUIT_GRACE_SECONDS,graph:null,obstacles:null,police:null};
+import { WANTED_POLICE_SPEED_BONUS } from '../config/heistConfig.js';
+export const game={player:car,ready:false,started:false,caught:false,distance:0,epoch:0,spawn:null,anchor:null,graceRemaining:PURSUIT_GRACE_SECONDS,graph:null,obstacles:null,police:null,paused:false,wantedLevel:0};
 export const guidance={route:null,version:0,selected:-1,remaining:0,lookahead:null,offRoute:0,status:'loading',lastPlan:-Infinity,arrived:false};
 let elapsed=0;
 export function initializeGame(graph,obstacles,spawn){
@@ -77,7 +78,7 @@ export function stepPursuit(dt){
   if(!cop.route){cop.v=0;return;}
   const gap=Math.hypot(car.x-cop.x,car.z-cop.z);
   updatePoliceBoost(cop,car,gap,dt);
-  const targetSpeed=policeTargetSpeed(cop,car);
+  const targetSpeed=policeTargetSpeed(cop,car)*(1+WANTED_POLICE_SPEED_BONUS*game.wantedLevel);
   cop.v+=Math.max(-PC.braking*dt,Math.min(PC.acceleration*dt,targetSpeed-cop.v));
   let yawBudget=PC.yawRate*dt;
   let budget=cop.v*dt,moved=0;
@@ -137,9 +138,14 @@ export function skipToDestination(){
   updateGuidance(true);
   return next;
 }
+// Heist alarm: skip any remaining start grace and make the cruiser re-route now.
+export function alertPolice(){
+  game.graceRemaining=0;
+  if(game.police){game.police.lastPlan=-Infinity;game.police.blocked.clear();}
+}
 export function tickGame(dt){
   elapsed+=Math.min(dt,.05);
   if(!game.ready)return;
   updateGuidance();
-  if(game.started&&!game.caught)stepPursuit(Math.min(dt,.05));
+  if(game.started&&!game.caught&&!game.paused)stepPursuit(Math.min(dt,.05));
 }

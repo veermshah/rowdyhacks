@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { isThumbsUp,isOpenHand,createRearGesture,updateRearGesture,rearViewActive } from '../src/input/gestures.js';
+import { isOpenHand,isFist,createGestureState,updateGestureState,rearViewActive } from '../src/input/gestures.js';
 import { policeTargetSpeed,angleDelta,updatePoliceBoost } from '../src/game/policeDriving.js';
 import { POLICE_CONFIG as C } from '../src/config/policeConfig.js';
 function hand(open=false){
@@ -8,21 +8,28 @@ function hand(open=false){
   for(const [i,p] of [[-.6,.9],[-.8,.5],[-1,-.1],[-1.2,-.7]].entries())h[i+1]={x:p[0],y:p[1],z:0};
   return h;
 }
+// Rear view is now "one fist + one open hand" in the unified gesture state
+// machine (gestures.js), not a dedicated thumbs-up detector - isThumbsUp no
+// longer exists. isFist only looks at the four fingers (not the thumb), so
+// this keeps the mirror/scale invariance checks but drops the old
+// thumb-orientation-specific sub-cases (sideways/down/folded thumb), which
+// have no isFist analog.
+const fistHand=hand(),openHand=hand(true);
 for(const mirror of [-1,1])for(const scale of [.1,1,3]){
-  const h=hand().map(p=>({x:p.x*mirror*scale,y:p.y*scale,z:0}));
-  assert(isThumbsUp(h));assert(!isOpenHand(h));
-  assert(!isThumbsUp(hand(true)),'open reverse/steering hands are not thumbs-up');
-  const sideways=h.map(p=>({x:-p.y,y:p.x,z:0}));assert(!isThumbsUp(sideways));
-  const down=h.map(p=>({x:p.x,y:-p.y,z:0}));assert(!isThumbsUp(down));
-  h[4]={...h[2]};assert(!isThumbsUp(h),'folded thumb rejected');
+  const h=fistHand.map(p=>({x:p.x*mirror*scale,y:p.y*scale,z:0}));
+  assert(isFist(h));assert(!isOpenHand(h));
 }
-const g=createRearGesture();
-for(const t of [0,40,80,120,160])assert(!updateRearGesture(g,true,t));
-assert(updateRearGesture(g,true,200));
-for(const t of [240,280,320,360])assert(updateRearGesture(g,false,t));
-assert(!updateRearGesture(g,false,400));
-updateRearGesture(g,true,450);updateRearGesture(g,false,500);assert(!updateRearGesture(g,true,550),'brief gesture cannot activate');
-assert(!updateRearGesture(g,true,1000),'missing frames cannot count toward activation');
+assert(!isFist(openHand),'open reverse/steering hand is not a fist');
+// Enter/leave rear view through the same state machine reverse uses, with
+// ENTER_REAR_MS=220 / LEAVE_REAR_MS=180 (consecutive calls kept within
+// MAX_FRAME_GAP=200ms, same as real per-frame polling, so the tracking-loss
+// gap-reset path doesn't fire early).
+const rg=createGestureState();
+const rearAt=(hands,t)=>updateGestureState(rg,hands,t).rearView;
+for(const t of [0,40,80,120,160,200])assert.equal(rearAt([fistHand,openHand],t),false);
+assert.equal(rearAt([fistHand,openHand],240),true,'held one-fist-one-open 220ms+ enters rear view');
+for(const t of [260,300,340,380,420])assert.equal(rearAt([fistHand,fistHand],t),true);
+assert.equal(rearAt([fistHand,fistHand],460),false,'held closed 180ms+ leaves rear view');
 assert(!rearViewActive({rearView:true,rearViewUpdatedAt:0},301),'stalled tracker releases camera');
 const player={maxSpeed:25,v:20},cop={x:0,z:0,yaw:0,index:0,route:{points:[{x:0,z:15},{x:0,z:40}]}};
 assert.equal(policeTargetSpeed(cop,player),23.5);
@@ -36,4 +43,4 @@ cop.route.points[1]={x:25,z:15};assert.equal(policeTargetSpeed(cop,player),23.5*
 cop.route.points[1]={x:20,z:35};assert(Math.abs(policeTargetSpeed(cop,player)-23.5*C.moderateTurnRatio)<1e-6);
 assert(Math.abs(angleDelta(-Math.PI+.1,Math.PI-.1)-.2)<1e-6);
 assert(C.spawnDistance>=170&&C.spawnDistance<=220);assert(C.routeUpdateMin>=.4&&C.routeUpdateMax<=.8);
-console.log('PASS: mirrored/scaled thumbs-up, curled fingers/upward thumb, open/sideways/down rejection, press/release debounce, tracking loss, pursuit speed caps and corner braking');
+console.log('PASS: mirrored/scaled fist detection, open-hand rejection, rear-view enter/leave debounce, tracking loss, pursuit speed caps and corner braking');

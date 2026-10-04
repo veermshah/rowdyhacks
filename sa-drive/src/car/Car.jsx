@@ -31,7 +31,7 @@ export default function Car() {
     }
 
     const oldX=car.x,oldZ=car.z;
-    if(game.ready&&game.started&&!game.caught)moveWithCollision(car, input, delta, buildingGrid, stepCar);
+    if(game.ready&&game.started&&!game.caught&&!game.paused)moveWithCollision(car, input, delta, buildingGrid, stepCar);
     game.distance+=Math.hypot(car.x-oldX,car.z-oldZ);
     if(reverseLights.current)reverseLights.current.visible=input.reverse||car.v<-.1;
     car.maxSpeed = savedMaxSpeed;

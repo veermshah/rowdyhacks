@@ -1,0 +1,36 @@
+"""Environment-driven settings for the Alamo vault Raspberry Pi relay.
+
+Everything lives here so the relay and the systemd unit can be tuned with a
+single .env file instead of editing code.
+"""
+import os
+
+from dotenv import load_dotenv
+
+load_dotenv()
+
+
+def _int(name, default):
+    return int(os.getenv(name, str(default)))
+
+
+SERIAL_PORT = os.getenv("ALAMO_SERIAL_PORT", "/dev/ttyACM0")
+BAUD_RATE = _int("ALAMO_BAUD_RATE", 9600)
+
+SERVER_URL = os.getenv("ALAMO_SERVER_URL", "http://localhost:5000")
+CAR_ID = os.getenv("ALAMO_CAR_ID", "solo")
+
+# Matches the dead-zone the Arduino sketch already uses for its own
+# joystick-follow servo logic (see alamo_vault.ino).
+JOYSTICK_CENTER_LOW = _int("ALAMO_JOY_CENTER_LOW", 460)
+JOYSTICK_CENTER_HIGH = _int("ALAMO_JOY_CENTER_HIGH", 565)
+
+# Only re-emit the light reading once it moves by at least this much, so a
+# noisy ADC doesn't flood the socket every ~150ms.
+LIGHT_MIN_SEND_DELTA = _int("ALAMO_LIGHT_DELTA", 4)
+
+# Degrees the servo moves to when the server sends {"type": "servo", "state": "open"}.
+SERVO_OPEN_ANGLE = _int("ALAMO_SERVO_OPEN_ANGLE", 170)
+SERVO_CLOSED_ANGLE = _int("ALAMO_SERVO_CLOSED_ANGLE", 90)
+
+RECONNECT_DELAY_S = 2.0

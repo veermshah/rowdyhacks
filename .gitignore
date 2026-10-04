@@ -1,11 +1,27 @@
+# Node / build
 node_modules/
 dist/
 .browser-check/
 .github-publish/
 browser-check.cjs
 browser-pursuit.cjs
+*.log
+.vercel/
+
+# Env files
 .env
 .env.*
 !.env.example
-*.log
-.vercel/
+
+# Python (Riverwalk server)
+__pycache__/
+*.pyc
+server/.venv/
+server/models/
+server/.agents/
+server/skills-lock.json
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { isOpenHand,createGearGesture,updateGearGesture } from '../src/input/gestures.js';
+import { isOpenHand,createGestureState,updateGestureState } from '../src/input/gestures.js';
 import { createCar,stepCar } from '../src/car/physics.js';
 import { wheelAngle } from '../src/input/hands.js';
 import { roadWidth,isDrivable } from '../src/config/roadConfig.js';
@@ -19,16 +19,26 @@ import { buildRiverScene } from '../src/lib/riverGeometry.js';
 import { WATER_Y,WALKWAY_Y } from '../src/lib/riverNetwork.js';
 function hand(open=true,angle=0){const h=Array.from({length:21},()=>({x:0,y:0,z:0}));for(const [i,m] of [5,9,13,17].entries())for(let j=0;j<4;j++){const x=(i-1.5)*.3,y=open?1+j:[1,2,1.5,.9][j];h[m+j]={x:x*Math.cos(angle)-y*Math.sin(angle),y:x*Math.sin(angle)+y*Math.cos(angle),z:0};}return h;}
 for(const angle of [0,.6,1.5,3]){assert(isOpenHand(hand(true,angle)));assert(!isOpenHand(hand(false,angle)));}
-const gesture=createGearGesture();
-for(const t of [0,40,80])assert.equal(updateGearGesture(gesture,[hand(),hand()],t),false);
-updateGearGesture(gesture,[hand(false),hand()],100);
-for(const t of [120,160,200,240])assert.equal(updateGearGesture(gesture,[hand(),hand()],t),false);
-assert.equal(updateGearGesture(gesture,[hand(),hand()],280),true);
-for(const t of [300,340,380,420])assert.equal(updateGearGesture(gesture,[hand(false),hand(false)],t),true);
-assert.equal(updateGearGesture(gesture,[hand(false),hand(false)],460),false);
-updateGearGesture(gesture,[hand(),hand()],500);updateGearGesture(gesture,null,540);assert.equal(updateGearGesture(gesture,[hand(),hand()],800),false);
+const gesture=createGestureState();
+const reverseAt=(hands,t)=>updateGestureState(gesture,hands,t).reverse;
+for(const t of [0,40,80])assert.equal(reverseAt([hand(),hand()],t),false);
+// A tracking gap (not a one-fist-one-open frame, which the newer rear-view
+// classifier reads as a real competing gesture) is the "ignored as noise"
+// case that shouldn't reset the pending reverse timer.
+reverseAt(null,100);
+for(const t of [120,160,200,240])assert.equal(reverseAt([hand(),hand()],t),false);
+assert.equal(reverseAt([hand(),hand()],280),true,'held open 280ms enters reverse');
+// Leaving reverse needs LEAVE_REVERSE_MS (350ms) of a held non-reverse gesture.
+// Consecutive calls must stay within MAX_FRAME_GAP (200ms) of each other, same
+// as real per-frame polling, or the gap-reset path (meant for lost tracking)
+// kicks in and restarts the pending timer early.
+for(const t of [300,340,380,420,460,500,540,580,620])assert.equal(reverseAt([hand(false),hand(false)],t),true);
+assert.equal(reverseAt([hand(false),hand(false)],660),false,'held closed 350ms+ leaves reverse');
+// Brief poke back toward reverse, then a >200ms tracking gap resets the
+// pending timer, so a later frame alone isn't enough to re-enter reverse.
+reverseAt([hand(),hand()],680);reverseAt(null,720);assert.equal(reverseAt([hand(),hand()],1000),false);
 const c={...createCar(),v:15};stepCar(c,{gas:1,brake:0,steer:0,reverse:true},.05);assert(c.v>0&&c.v<15);
-let seenZero=false;for(let i=0;i<600;i++){const previous=c.v;stepCar(c,{gas:1,brake:0,steer:0,reverse:true},1/60);if(c.v===0)seenZero=true;if(c.v<0&&previous>=0)assert(seenZero);}assert(c.v<0&&c.v>=-7.5);
+let seenZero=false;for(let i=0;i<600;i++){const previous=c.v;stepCar(c,{gas:1,brake:0,steer:0,reverse:true},1/60);if(c.v===0)seenZero=true;if(c.v<0&&previous>=0)assert(seenZero);}assert(c.v<0&&c.v>=-c.maxSpeed*.3,'reverse capped at 30% of maxSpeed');
 for(const steer of [-1,1]){const r={...createCar(),v:-5};stepCar(r,{gas:0,brake:0,steer,reverse:true},.05);assert.equal(Math.sign(r.yaw),steer);assert.equal(Math.sign(r.x),-steer);}
 assert(wheelAngle({x:.2,y:.3},{x:.8,y:.6})>0);
 const wall=buildBuildingGrid([{points:[{x:-20,z:10},{x:20,z:10},{x:20,z:20},{x:-20,z:20}]}]);const crash={...createCar(),v:25};for(let i=0;i<300;i++)moveWithCollision(crash,{gas:1,brake:0,steer:0},1/60,wall,stepCar);const impactZ=crash.z;assert.equal(crash.v,0);for(let i=0;i<120;i++)moveWithCollision(crash,{gas:1,brake:0,steer:0,reverse:true},1/60,wall,stepCar);assert(crash.z<impactZ-3);assert(!overlapsBuilding(wall,crash.x,crash.z));
@@ -59,7 +69,8 @@ for(let i=0;i<3600&&!game.caught&&waypoint<chasePath.length;i++){
   if(length<.001){waypoint++;continue;}
   car.x+=dx/length*step;car.z+=dz/length*step;car.yaw=Math.atan2(dx,dz);car.v=20;
   const old={x:game.police.x,z:game.police.z,yaw:game.police.yaw};tickGame(1/60);const moved=Math.hypot(game.police.x-old.x,game.police.z-old.z);policeTravel+=moved;
-  assert(moved<=25*1.1/60+.001,'bounded pursuit movement without teleporting');
+  const maxBoostRatio=Math.max(POLICE_CONFIG.maxCatchupRatio,POLICE_CONFIG.slowPlayerSpeedRatio);
+  assert(moved<=car.maxSpeed*maxBoostRatio*1.1/60+.001,'bounded pursuit movement without teleporting');
   assert(Math.abs(Math.atan2(Math.sin(game.police.yaw-old.yaw),Math.cos(game.police.yaw-old.yaw)))<=POLICE_CONFIG.yawRate/60+.001,'bounded police rotation');
   const policeRoad=nearestEdge(graph,game.police);assert(policeRoad.distance<=policeRoad.edge.width/2-.89,'police remains inside road');
   assert(!overlapsBuilding(obstacles,game.police.x,game.police.z),'moving pursuit never enters buildings');
@@ -79,7 +90,7 @@ restartGame();game.started=false;tickGame(1);assert.equal(game.graceRemaining,4,
 game.started=true;const waiting={x:game.police.x,z:game.police.z};
 for(let i=0;i<230;i++)tickGame(1/60);
 assert.equal(game.police.x,waiting.x);assert.equal(game.police.z,waiting.z);assert(!game.caught);
-const scene=buildRiverScene(river,roads,data.buildings.filter(b=>!LANDMARK_OSM_REPLACEMENTS.has(b.id)));
+const scene=buildRiverScene(river,roads,data.buildings.filter(b=>!LANDMARK_OSM_REPLACEMENTS.has(b.id)),obstacles,roadGrid);
 for(const [geometry,height] of [[scene.water,WATER_Y],[scene.walkways,WALKWAY_Y]]){
   const vertices=geometry.attributes.position;assert(vertices.count>0);
   for(let i=0;i<vertices.count;i++)assert(Math.abs(vertices.getY(i)-height)<.001);
