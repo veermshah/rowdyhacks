@@ -69,6 +69,7 @@ export async function createApp({ sdkModule, apiKey = PRESAGE_API_KEY, devMode =
         presageSdkVersion: sdkModule?.sdk?.SmartSpectraSDK?.version ?? null,
         decoder: 'sharp',
         scanner: presage.owner ? 'busy' : 'free',
+        stats: presage.stats,
         devMode,
       }));
       return;

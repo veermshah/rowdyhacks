@@ -172,6 +172,8 @@ export class PresageSession {
     this.lastTsUs = 0;
     this.frameQueue = Promise.resolve();
     this.pendingFrames = 0;
+    // Diagnostics for /health: what actually reaches Presage and what comes back.
+    this.stats = { framesSent: 0, framesDropped: 0, sendFrameRejected: 0, metricsPackets: 0, faceSamples: 0, validationEvents: 0, lastValidationCode: null, lastProcessingStatus: null, lastError: null };
     this.teardown = Promise.resolve();
     this.starting = null;
     this.retryAfter = 0;
@@ -220,6 +222,7 @@ export class PresageSession {
         logLevel: SmartSpectraLogLevel.kWarning,
       });
       sdk.on('metrics', (buf) => {
+        this.stats.metricsPackets += 1;
         if (this.owner !== id) return;
         let metrics;
         try {
@@ -229,9 +232,12 @@ export class PresageSession {
           return;
         }
         if (Buffer.isBuffer(metrics)) return;
+        this.stats.faceSamples += (metrics.face?.landmarks?.length ?? 0) + (metrics.face?.blinking?.length ?? 0) + (metrics.face?.expression?.length ?? 0);
         callbacks.onMetrics?.(metrics);
       });
       sdk.on('validationStatus', (code) => {
+        this.stats.validationEvents += 1;
+        this.stats.lastValidationCode = code;
         if (this.owner !== id) return;
         this.hint = code === 0 ? null : HINTS[code] ?? null;
         if (code === NO_FACE) callbacks.onFace?.(false);
@@ -239,11 +245,13 @@ export class PresageSession {
         callbacks.onStatus?.();
       });
       sdk.on('processingStatus', (status) => {
+        this.stats.lastProcessingStatus = status;
         if (this.owner !== id) return;
         if (status === 3) this.state = 'running'; // ProcessingStatus.kRunning
         callbacks.onStatus?.();
       });
       sdk.on('error', (code, message, retryable) => {
+        this.stats.lastError = `${code}: ${message}`;
         if (this.owner !== id) return;
         this.log.warn(`[presage] error ${code}: ${message} (retryable=${retryable})`);
         this.#setError(code, message);
@@ -291,7 +299,10 @@ export class PresageSession {
    */
   sendJpeg(id, jpegBytes, clientMs) {
     if (this.owner !== id || !this.sdk || this.state !== 'running') return false;
-    if (this.pendingFrames >= MAX_PENDING_FRAMES) return false;
+    if (this.pendingFrames >= MAX_PENDING_FRAMES) {
+      this.stats.framesDropped += 1;
+      return false;
+    }
     if (jpegBytes.length < 4 || jpegBytes[0] !== 0xff || jpegBytes[1] !== 0xd8) return false; // not a JPEG
     // Presage needs strictly increasing microsecond timestamps; assign on arrival.
     let ts = Number.isFinite(clientMs) ? Math.round(clientMs * 1000) : Math.round(performance.now() * 1000);
@@ -304,7 +315,9 @@ export class PresageSession {
       .then(({ data, info }) => {
         if (this.sdk !== sdk || this.state !== 'running') return; // session ended while decoding
         const { PixelFormat } = this.sdkModule.sdk;
-        sdk.sendFrame(data, info.width, info.height, info.width * 3, PixelFormat.kRGB, ts);
+        const ok = sdk.sendFrame(data, info.width, info.height, info.width * 3, PixelFormat.kRGB, ts);
+        if (ok === false) this.stats.sendFrameRejected += 1;
+        else this.stats.framesSent += 1;
       })
       .catch((e) => {
         // Frames keep coming at 30 fps; log a failing state once, not every frame.
