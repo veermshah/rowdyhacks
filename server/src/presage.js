@@ -31,14 +31,25 @@ export const GESTURES = {
   NOD_MAX_S: 1.5,           // ...within this many seconds
   NOD_BASELINE_ALPHA: 0.1,  // how fast the resting height follows slow drift
   BLINK_MIN_GAP_S: 0.15,    // two "blink" detections closer than this are one blink
-  SMILE_HAPPY: 0.6,         // Presage HAPPY confidence (0-1) that counts as a smile
-  SMILE_SAMPLES: 2,         // consecutive HAPPY samples required
+  // A smile is whichever of these two Presage signals fires first. Real-face logs
+  // showed the expression model calling a neutral face "SURPRISE" ~94% of the time
+  // and rarely giving HAPPY >= 60%, so it can't be the only signal.
+  SMILE_HAPPY: 0.45,        // Presage HAPPY confidence (0-1) that counts as a smile...
+  SMILE_HAPPY_TOP: 0.35,    // ...or HAPPY is Presage's top expression with at least this much
+  SMILE_MOUTH_WIDEN: 0.1,   // landmarks: mouth >= 10% wider (relative to face width) than at rest...
+  SMILE_MOUTH_SAMPLES: 3,   // ...for this many landmark samples in a row
+  MOUTH_BASELINE_ALPHA: 0.05, // how fast the resting mouth width follows slow drift
 };
 
 // Face-mesh landmark indices (Presage uses the 478-point MediaPipe numbering).
 const NOSE_TIP = 1;
 const FOREHEAD = 10;
 const CHIN = 152;
+const MOUTH_LEFT = 61;
+const MOUTH_RIGHT = 291;
+const CHEEK_LEFT = 234;
+const CHEEK_RIGHT = 454;
+const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
 const HAPPY = 5; // ExpressionType.HAPPY
 
 const num = (v) => (v && typeof v === 'object' && typeof v.toNumber === 'function' ? v.toNumber() : Number(v));
@@ -86,12 +97,44 @@ export class FaceSignalAdapter {
     this.nod = new NodTracker();
     this.blinkOn = false;
     this.lastBlinkT = -Infinity;
-    this.happySamples = 0;
+    this.exprSmileOn = false;   // HAPPY above threshold on the last expression sample
+    this.mouthBaseline = null;  // resting mouth width / face width
+    this.mouthWideSamples = 0;
+    this.mouthSmileOn = false;
     // Packets can overlap, so skip samples already seen - tracked per metric:
     // Presage computes blinks/expressions behind the landmarks, so a later
     // packet's blink samples can be older than landmarks already processed.
     this.lastT = { landmarks: -Infinity, blinking: -Infinity, expression: -Infinity };
-    this.debug = { blink: 0, smile: 0, nodDelta: 0, blinkSamples: 0, eyesClosedSamples: 0, blinks: 0 };
+    this.debug = {
+      blink: 0, smile: 0, nodDelta: 0, blinkSamples: 0, eyesClosedSamples: 0, blinks: 0,
+      mouthWiden: 0, smiles: 0, lastSmileVia: null,
+    };
+  }
+
+  // Mouth width relative to face width, compared with its resting value.
+  #mouthSmile(pts, t, events) {
+    if (pts.length <= CHEEK_RIGHT) return;
+    const faceW = dist(pts[CHEEK_LEFT], pts[CHEEK_RIGHT]);
+    if (!(faceW > 0)) return;
+    const ratio = dist(pts[MOUTH_LEFT], pts[MOUTH_RIGHT]) / faceW;
+    if (this.mouthBaseline == null) {
+      this.mouthBaseline = ratio;
+      return;
+    }
+    const widen = ratio / this.mouthBaseline - 1;
+    this.debug.mouthWiden = Math.round(widen * 1000) / 1000;
+    if (widen >= GESTURES.SMILE_MOUTH_WIDEN) {
+      this.mouthWideSamples += 1;
+      if (this.mouthWideSamples >= GESTURES.SMILE_MOUTH_SAMPLES && !this.mouthSmileOn) {
+        this.mouthSmileOn = true;
+        events.push([t, 'smile', 'mouth']);
+      }
+    } else {
+      this.mouthWideSamples = 0;
+      this.mouthSmileOn = false;
+      // Only learn the resting width while not smiling.
+      if (widen < GESTURES.SMILE_MOUTH_WIDEN / 2) this.mouthBaseline += GESTURES.MOUTH_BASELINE_ALPHA * (ratio - this.mouthBaseline);
+    }
   }
 
   /**
@@ -118,6 +161,7 @@ export class FaceSignalAdapter {
       const faceH = Math.abs(pts[CHIN].y - pts[FOREHEAD].y);
       if (this.nod.update(pts[NOSE_TIP].y, faceH, t)) events.push([t, 'nod']);
       this.debug.nodDelta = Math.round(this.nod.delta * 1000) / 1000;
+      this.#mouthSmile(pts, t, events);
     }
 
     for (const b of fresh('blinking', face.blinking)) {
@@ -136,14 +180,23 @@ export class FaceSignalAdapter {
 
     for (const ex of fresh('expression', face.expression)) {
       const t = num(ex.timestamp) / 1e6;
-      const happy = (ex.scores ?? []).find((s) => s.type === HAPPY || s.type === 'HAPPY');
+      const scores = ex.scores ?? [];
+      const isHappy = (s) => s.type === HAPPY || s.type === 'HAPPY';
+      const happy = scores.find(isHappy);
       const score = happy ? num(happy.confidence) / 100 : 0;
+      const top = scores.reduce((a, b) => (num(b.confidence) > num(a?.confidence ?? -1) ? b : a), null);
+      const smiling = score >= GESTURES.SMILE_HAPPY || (top && isHappy(top) && score >= GESTURES.SMILE_HAPPY_TOP);
       this.debug.smile = Math.round(score * 100) / 100;
-      this.happySamples = score >= GESTURES.SMILE_HAPPY ? this.happySamples + 1 : 0;
-      if (this.happySamples === GESTURES.SMILE_SAMPLES) events.push([t, 'smile']);
+      if (smiling && !this.exprSmileOn) events.push([t, 'smile', 'expression']);
+      this.exprSmileOn = smiling;
     }
 
     events.sort((a, b) => a[0] - b[0]);
+    for (const [, g, via] of events) {
+      if (g !== 'smile') continue;
+      this.debug.smiles += 1;
+      this.debug.lastSmileVia = via;
+    }
     return { gestures: events.map((e) => e[1]), sawFace };
   }
 }

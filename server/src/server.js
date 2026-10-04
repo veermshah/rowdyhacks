@@ -156,8 +156,13 @@ export async function createApp({
         const { blinkSamples, eyesClosedSamples, blinks } = s.adapter.debug;
         Object.assign(presage.stats, { blinkSamples, eyesClosedSamples, blinks });
         if (sawFace) s.challenge.face(true, now());
-        if (debug.enabled && (gestures.length || s.adapter.debug.blink)) {
-          debug('adapter', { gestures, eyesClosed: !!s.adapter.debug.blink, smile: s.adapter.debug.smile, nodDelta: s.adapter.debug.nodDelta, blinkSamples, eyesClosedSamples, blinks });
+        const ad = s.adapter.debug;
+        // Log packets with a gesture, closed eyes, or a smile building (HAPPY or mouth widening).
+        if (debug.enabled && (gestures.length || ad.blink || ad.smile >= 0.3 || ad.mouthWiden >= 0.05)) {
+          debug('adapter', {
+            gestures, eyesClosed: !!ad.blink, happy: ad.smile, mouthWiden: ad.mouthWiden, smileVia: ad.lastSmileVia,
+            nodDelta: ad.nodDelta, blinkSamples, eyesClosedSamples, blinks,
+          });
         }
         for (const g of gestures) {
           const before = s.challenge.snapshot(now());

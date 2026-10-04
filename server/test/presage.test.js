@@ -55,11 +55,40 @@ test('adapter: blinks computed behind the landmarks still count (per-metric dedu
   assert.deepEqual(a.ingest(expression([[4.5, 90], [4.7, 95]])).gestures, ['smile']);
 });
 
-test('adapter: smile = HAPPY confidence >= 60% on consecutive samples', () => {
+test('adapter: smile via expression = HAPPY >= 45%, once per smile', () => {
   const a = new FaceSignalAdapter();
-  assert.deepEqual(a.ingest(expression([[1, 30], [1.1, 70]])).gestures, []);
-  assert.deepEqual(a.ingest(expression([[1.2, 80]])).gestures, ['smile']);
+  assert.deepEqual(a.ingest(expression([[1, 30], [1.1, 40]])).gestures, []);
+  assert.deepEqual(a.ingest(expression([[1.2, 48], [1.3, 80]])).gestures, ['smile']); // held smile = one event
   assert.equal(a.debug.smile, 0.8);
+  assert.equal(a.debug.lastSmileVia, 'expression');
+  assert.deepEqual(a.ingest(expression([[1.4, 10], [1.5, 60]])).gestures, ['smile']); // relaxed, smiled again
+});
+
+test('adapter: smile via expression when HAPPY is the top label (>= 35%)', () => {
+  const a = new FaceSignalAdapter();
+  const pkt = (t, scores) => ({ face: { expression: [{ stable: true, timestamp: us(t), scores }] } });
+  // The real-face logs: a neutral face read as SURPRISE - not a smile.
+  assert.deepEqual(a.ingest(pkt(1, [{ type: 8, confidence: 75 }, { type: 5, confidence: 4 }])).gestures, []);
+  // HAPPY on top at 38% (below 45%) still counts.
+  assert.deepEqual(a.ingest(pkt(2, [{ type: 8, confidence: 30 }, { type: 5, confidence: 38 }])).gestures, ['smile']);
+});
+
+test('adapter: smile via landmarks = mouth widens >= 10% vs rest for 3 samples', () => {
+  const a = new FaceSignalAdapter();
+  const withMouth = (t, mouthHalfW) => {
+    const pts = face(200);
+    pts[234] = { x: 100, y: 200 }; // cheeks -> face width 200
+    pts[454] = { x: 300, y: 200 };
+    pts[61] = { x: 200 - mouthHalfW, y: 250 };
+    pts[291] = { x: 200 + mouthHalfW, y: 250 };
+    return { value: pts, stable: true, reset: false, timestamp: us(t) };
+  };
+  const lm = (samples) => ({ face: { landmarks: samples.map(([t, w]) => withMouth(t, w)) } });
+  assert.deepEqual(a.ingest(lm([[1, 40], [1.1, 40], [1.2, 41], [1.3, 40]])).gestures, []); // at rest (80 px mouth)
+  assert.deepEqual(a.ingest(lm([[1.4, 45], [1.5, 46]])).gestures, []);                    // only 2 wide samples
+  assert.deepEqual(a.ingest(lm([[1.6, 46], [1.7, 47]])).gestures, ['smile']);             // 3rd -> smile, once
+  assert.equal(a.debug.lastSmileVia, 'mouth');
+  assert.ok(a.debug.mouthWiden >= 0.1);
 });
 
 // ---- Fake SDK module ---------------------------------------------------------
