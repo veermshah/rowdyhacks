@@ -31,15 +31,20 @@ $env:PORT=5001; npm start                     # should print "API key: set"
 
 # 2) the tunnel
 cd server
-npm run tunnel                                # prints https://<random-name>.trycloudflare.com
+npm run tunnel
 ```
+
+`npm run tunnel` prints the full game link to share - and copies it to your
+clipboard - every time a tunnel comes up. If the tunnel dies (Wi-Fi change,
+sleep) it starts a new one automatically and prints/copies the new link.
+Set `GAME_URL` to change the site it builds the link for.
 
 ## Play
 
 Add the tunnel link to the game URL:
 
 ```
-https://rowdyhacks-green.vercel.app/?presage=https://<random-name>.trycloudflare.com
+https://rowdyhacks-hackutd.vercel.app/?presage=https://<random-name>.trycloudflare.com
 ```
 
 Local testing works the same: `http://localhost:5173/?presage=https://<random-name>.trycloudflare.com`
@@ -50,12 +55,13 @@ Python server).
 
 ## Notes
 
-- Keep the laptop awake and both terminals open. The tunnel link changes every
-  time `npm run tunnel` restarts, so send teammates the new link.
+- Keep the laptop awake and both terminals open. Quick-tunnel links change
+  whenever a new tunnel starts; `npm run tunnel` prints and copies the new
+  link - send that to teammates.
 - One player can be scanned at a time (a Presage SDK limit). Others see
   "Another crew is at the checkpoint".
 - `CORS_ORIGINS` in `server/.env` must include the game's address, e.g.
-  `https://rowdyhacks-green.vercel.app,http://localhost:5173` (any localhost
+  `https://rowdyhacks-hackutd.vercel.app,http://localhost:5173` (any localhost
   port is always allowed).
 - The tunnel needs outbound port 7844. Some campus/event Wi-Fi blocks it
   (cloudflared logs "Allow outbound TCP on port 7844") - switch networks or use
