@@ -68,7 +68,7 @@ def _play_speech(executable, text):
     if player is None or config.TTS_COMMAND != "espeak-ng":
         log.info("Playing speech directly with %s%s", executable, " (paplay unavailable)" if player is None else "")
         result = subprocess.run(
-            [executable, text],
+            [executable, "-s", str(config.TTS_SPEED_WPM), text],
             check=False,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.PIPE,
@@ -79,7 +79,7 @@ def _play_speech(executable, text):
         return
 
     rendered = subprocess.run(
-        [executable, "--stdout", text],
+        [executable, "--stdout", "-s", str(config.TTS_SPEED_WPM), text],
         check=False,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
@@ -102,7 +102,7 @@ def _play_speech(executable, text):
     except (EOFError, wave.Error) as exc:
         log.warning("Speech audio could not be prepared (%s); using direct playback", exc)
         result = subprocess.run(
-            [executable, text],
+            [executable, "-s", str(config.TTS_SPEED_WPM), text],
             check=False,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.PIPE,

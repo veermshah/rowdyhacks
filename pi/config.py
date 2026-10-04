@@ -38,6 +38,7 @@ JOYSTICK_INVERT_X = _bool("ALAMO_JOY_INVERT_X", True)
 # This joystick's Y axis is electrically reversed: physical down reads as up.
 JOYSTICK_INVERT_Y = _bool("ALAMO_JOY_INVERT_Y", True)
 TTS_COMMAND = os.getenv("ALAMO_TTS_COMMAND", "espeak-ng").strip()
+TTS_SPEED_WPM = _int("ALAMO_TTS_SPEED_WPM", 125)
 TTS_LEAD_IN_S = float(os.getenv("ALAMO_TTS_LEAD_IN_S", "0.6"))
 TTS_AUDIO_SINK = os.getenv("ALAMO_TTS_AUDIO_SINK", "").strip()
 

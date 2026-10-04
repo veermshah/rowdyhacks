@@ -48,6 +48,8 @@ Edit `.env`:
 - `ALAMO_JOY_INVERT_X` / `ALAMO_JOY_INVERT_Y` - set `true` when that axis
   moves in the opposite direction from the expected direction.
 - `ALAMO_TTS_COMMAND` - installed speech executable, normally `espeak-ng`.
+- `ALAMO_TTS_SPEED_WPM` - speech rate for `espeak-ng` (default `125`; lower is
+  slower and clearer).
 - `ALAMO_TTS_AUDIO_SINK` - optional PipeWire/PulseAudio sink name; leave blank
   to use the configured default sink.
 - `ALAMO_TTS_LEAD_IN_S` - silent lead-in before speech to let Bluetooth

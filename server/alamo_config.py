@@ -17,7 +17,9 @@ SPOTTED_HOLD_S = 0.5         # ...continuously for this long to count as SPOTTED
 
 # --- The joystick sequence ------------------------------------------------------
 SEQUENCE_LENGTH = 4           # one fixed-length sequence, generated randomly per run
-KEYWORDS = ("ALAMO", "BADGER", "CANYON", "DESERT", "FALCON", "MESA", "RANGER", "SUNSET")
+# Short, common, phonetically distinct words are easier to understand over a
+# small Bluetooth speaker and still simple to type on the website.
+KEYWORDS = ("APPLE", "BRIDGE", "BUTTON", "CANDLE", "GARDEN", "HAMMER", "PENCIL", "WINDOW")
 MOVE_DISPLAY_S = 0.8          # how long each move word shows on the LCD
 MOVE_GAP_S = 0.3              # blank gap between move words
 BLIND_TRANSITION_S = 1.5      # "CAMERA BLIND / WATCH CLOSELY" message before the sequence plays
