@@ -294,7 +294,7 @@ export function towerAdminReset() {
   socket?.emit('tower_admin_reset');
 }
 
-/** Dev simulator standing in for the Pi: {device: 'joystick'|'button', value}. */
+/** Dev simulator standing in for the Pi: {device: 'joystick', value: up|down|left|right}. */
 export function towerSimInput(device, value) {
   socket?.emit('tower_sim_input', { device, value });
 }

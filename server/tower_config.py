@@ -74,7 +74,7 @@ BRIEFING = (
     "you're the account holder - or find the staff override phrase. "
     "She'll send a one-time code to the device on file: the vault's screen. "
     "Read it off, then key it in on the joystick (up/down = digit, "
-    "left/right = position, press = submit) before it expires."
+    "left/right = position; right on the last digit submits) before it expires."
 )
 
 # --- Vault LCD status lines (<=16 chars each; {..} filled at runtime) ---------

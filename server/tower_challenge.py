@@ -20,10 +20,10 @@ on the joystick. The code is also never in a snapshot (the vault LCD preview
 is masked while the code is showing); it goes only to the Pi's LCD cmd.
 
 Hardware is the same shared vault rig as the Alamo, over the same fixed Pi
-protocol: `input` events ({"device": "joystick"|"button", "value": ...}) in,
+protocol: `input` events ({"device": "joystick", "value": ...}) in,
 `cmd` events ({"type": "lcd"|"rgb"|"led"|"beep"|"servo", ...}) out. Joystick:
 up/down change the current digit (0-9, wrapping), left/right move the cursor,
-the joystick BUTTON submits.
+moving right off the last digit submits (no button needed).
 
 TowerChallenge is a plain class driven by explicit `now` timestamps (no
 threads, no sockets), so it's fully unit-testable. Methods that advance the
@@ -154,7 +154,7 @@ class TowerChallenge:
         return self.otp_status == "verified"
 
     # ------------------------------------------------------------------ #
-    # Input from the Pi (joystick / button)
+    # Input from the Pi (joystick)
     # ------------------------------------------------------------------ #
     def handle_input(self, device, value, now):
         events = []
@@ -162,10 +162,10 @@ class TowerChallenge:
             return events
         if device == "joystick":
             move = normalize_joystick(value)
-            if move in MOVES:
+            if move == "right" and self.cursor == OTP_LENGTH - 1:
+                events += self._submit(now)   # right past the last digit = enter
+            elif move in MOVES:
                 self._edit_entry(move)
-        elif device == "button" and value:
-            events += self._submit(now)
         events += self._advance_display(now)
         self._flush(now)
         return events
