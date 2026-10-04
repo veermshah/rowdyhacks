@@ -36,7 +36,7 @@ services:
       # Comma-separated; drives both Flask-CORS and Socket.IO's own CORS
       # check.
       - key: CORS_ORIGINS
-        value: https://rowdyhacks-green.vercel.app,http://localhost:5173
+        value: https://www.hackstash.us,https://hackstash.us,https://rowdyhacks-green.vercel.app,http://localhost:5173
       # Defaults to "1" (dev mode) in app.py if unset, which exposes
       # admin/dev socket events (skip/reset/sim-input) to any client with no
       # auth. Set to 0 for a public deploy; leave 1 only if you want those
