@@ -72,6 +72,11 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now alamo-pi
 ```
 
+The included unit is configured for this Pi user (`dhivyesh123`) and uses the
+project's `.venv`, so the installed `python-socketio` package is available.
+If the Linux username or repository path is different, edit those values in
+`alamo-pi.service` before copying it into `/etc/systemd/system/`.
+
 Check status / logs:
 
 ```sh
