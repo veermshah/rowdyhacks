@@ -54,14 +54,14 @@ function fakeSdkModule() {
   const instances = [];
   class SmartSpectraSDK {
     static version = 'fake';
-    constructor(opts) { this.opts = opts; this.handlers = {}; this.frames = []; instances.push(this); }
+    constructor(opts) { this.opts = opts; this.handlers = {}; this.frames = []; this.accept = true; instances.push(this); }
     on(ev, cb) { this.handlers[ev] = cb; return this; }
     useCustomInput() { return this; }
     start() {
       if (this.opts.apiKey === 'bad') throw Object.assign(new Error('auth failed'), { code: 2, retryable: false });
       this.handlers.processingStatus?.(3);
     }
-    sendFrame(buf, w, h, stride, fmt, ts) { this.frames.push({ w, h, stride, fmt, ts, bytes: buf.length }); return true; }
+    sendFrame(buf, w, h, stride, fmt, ts) { this.frames.push({ w, h, stride, fmt, ts, bytes: buf.length }); return this.accept; }
     async stopAsync() { this.stopped = true; }
     async destroy() { this.destroyed = true; }
     emit(ev, ...args) { this.handlers[ev]?.(...args); }
@@ -98,10 +98,10 @@ test('pipeline: frames reach Presage; Presage gestures clear the vault and pay o
     await client.emitWithAck('start_challenge');
 
     // First frame acquires the scanner; next frames are pushed to Presage as RGBA.
-    await client.emitWithAck('frame', { image: JPEG, t: 1000 });
+    await client.emitWithAck('frame', { image: JPEG });
     await wait(50);
     let snap;
-    for (let i = 1; i <= 5; i++) { snap = await client.emitWithAck('frame', { image: JPEG, t: 1000 + i * 33 }); await wait(15); }
+    for (let i = 1; i <= 5; i++) { snap = await client.emitWithAck('frame', { image: JPEG }); await wait(15); }
     await wait(50); // decoding is async
     const sdk = fake.instances[0];
     assert.equal(sdk.opts.apiKey, 'test-key');
@@ -113,13 +113,13 @@ test('pipeline: frames reach Presage; Presage gestures clear the vault and pay o
 
     // Presage reports a face; keep frames flowing so the face step confirms.
     sdk.emit('validationStatus', 0, 0, '');
-    for (let i = 6; i < 30; i++) { snap = await client.emitWithAck('frame', { image: JPEG, t: 1000 + i * 33 }); await wait(30); }
+    for (let i = 6; i < 30; i++) { snap = await client.emitWithAck('frame', { image: JPEG }); await wait(30); }
     assert.equal(snap.step, 'nod');
 
     // Out-of-order (smile, blink) ignored, then the real sequence.
     sdk.emit('metrics', expression([[10, 90], [10.1, 90]]));
     sdk.emit('metrics', blinking([[10.2, false], [10.3, true], [10.4, false]]));
-    snap = await client.emitWithAck('frame', { image: JPEG, t: 3000 });
+    snap = await client.emitWithAck('frame', { image: JPEG });
     assert.equal(snap.step, 'nod');
     assert.equal(snap.failures, 0);
 
@@ -146,13 +146,53 @@ test('pipeline: non-JPEG bytes are rejected and a slow server drops frames inste
   const { app, client } = await startServer({ sdkModule: fake.module, apiKey: 'k' });
   try {
     await client.emitWithAck('start_challenge');
-    await client.emitWithAck('frame', { image: JPEG, t: 1 });
+    await client.emitWithAck('frame', { image: JPEG });
     await wait(50);
-    assert.equal(app.presage.sendJpeg(client.id, Buffer.from('not a jpeg'), 2), false);
-    const accepted = Array.from({ length: 10 }, (_, i) => app.presage.sendJpeg(client.id, JPEG, 10 + i));
+    assert.equal(app.presage.sendJpeg(client.id, Buffer.from('not a jpeg')), false);
+    const accepted = Array.from({ length: 10 }, (_, i) => app.presage.sendJpeg(client.id, JPEG));
     assert.deepEqual(accepted, [true, true, true, false, false, false, false, false, false, false]);
     await wait(100);
     assert.equal(fake.instances[0].frames.length >= 3, true);
+  } finally {
+    client.disconnect();
+    await app.close();
+  }
+});
+
+test('pipeline: a pause in frames is compressed so Presage never sees a > 2 s gap', async () => {
+  const fake = fakeSdkModule();
+  const { app, client } = await startServer({ sdkModule: fake.module, apiKey: 'k' });
+  try {
+    await client.emitWithAck('start_challenge');
+    await client.emitWithAck('frame', { image: JPEG });
+    await wait(50);
+    await client.emitWithAck('frame', { image: JPEG });
+    await wait(1300); // tab hidden / network stall
+    await client.emitWithAck('frame', { image: JPEG });
+    await wait(80);
+    const ts = fake.instances[0].frames.map((f) => f.ts);
+    assert.equal(ts.length, 2, 'first frame only acquires the scanner');
+    assert.ok(ts[1] - ts[0] <= 1_000_000, `gap ${ts[1] - ts[0]} us sent to Presage`);
+    assert.equal(app.presage.stats.gapsCompressed, 1);
+  } finally {
+    client.disconnect();
+    await app.close();
+  }
+});
+
+test('pipeline: Presage stuck rejecting frames -> session restarts by itself', async () => {
+  const fake = fakeSdkModule();
+  const { app, client } = await startServer({ sdkModule: fake.module, apiKey: 'k' });
+  try {
+    await client.emitWithAck('start_challenge');
+    await client.emitWithAck('frame', { image: JPEG });
+    await wait(50);
+    fake.instances[0].accept = false;
+    for (let i = 0; i < 40; i++) { await client.emitWithAck('frame', { image: JPEG }); await wait(8); }
+    await wait(100);
+    assert.ok(fake.instances[0].destroyed, 'stuck session torn down');
+    assert.equal(fake.instances.length, 2, 'fresh session started');
+    assert.equal(app.presage.stats.sessionRestarts, 1);
   } finally {
     client.disconnect();
     await app.close();
@@ -164,9 +204,9 @@ test('pipeline: bad API key surfaces an error and does not hammer Presage', asyn
   const { app, client } = await startServer({ sdkModule: fake.module, apiKey: 'bad' });
   try {
     await client.emitWithAck('start_challenge');
-    for (let i = 0; i < 10; i++) await client.emitWithAck('frame', { image: JPEG, t: i * 33 });
+    for (let i = 0; i < 10; i++) await client.emitWithAck('frame', { image: JPEG });
     await wait(50);
-    const snap = await client.emitWithAck('frame', { image: JPEG, t: 999 });
+    const snap = await client.emitWithAck('frame', { image: JPEG });
     assert.equal(snap.sensor, 'error');
     assert.match(snap.sensorError, /API key/);
     assert.equal(fake.instances.length, 1, 'only one start attempt during the back-off window');
@@ -180,7 +220,7 @@ test('pipeline: no API key -> clear message; dev simulate still works and pays o
   const { app, client } = await startServer({ sdkModule: null, apiKey: '' });
   try {
     await client.emitWithAck('join_car', { carId: 'car-sim' });
-    let snap = await client.emitWithAck('frame', { image: JPEG, t: 1 });
+    let snap = await client.emitWithAck('frame', { image: JPEG });
     assert.equal(snap.sensor, 'no_key');
     for (const a of ['face', 'smile', 'nod', 'blink', 'blink', 'smile']) snap = await client.emitWithAck('simulate', { action: a });
     assert.equal(snap.status, 'complete');
@@ -201,15 +241,15 @@ test('pipeline: only one player can hold the Presage scanner', async () => {
     await new Promise((r) => other.on('connect', r));
     await client.emitWithAck('start_challenge');
     await other.emitWithAck('start_challenge');
-    await client.emitWithAck('frame', { image: JPEG, t: 1 });
+    await client.emitWithAck('frame', { image: JPEG });
     await wait(30);
-    const snap = await other.emitWithAck('frame', { image: JPEG, t: 1 });
+    const snap = await other.emitWithAck('frame', { image: JPEG });
     assert.equal(snap.sensor, 'busy');
     client.disconnect(); // first player leaves -> scanner frees up
     await wait(100);
-    await other.emitWithAck('frame', { image: JPEG, t: 2 });
+    await other.emitWithAck('frame', { image: JPEG });
     await wait(30);
-    assert.equal((await other.emitWithAck('frame', { image: JPEG, t: 3 })).sensor, 'running');
+    assert.equal((await other.emitWithAck('frame', { image: JPEG })).sensor, 'running');
   } finally {
     other.disconnect();
     await app.close();

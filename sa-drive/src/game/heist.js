@@ -98,13 +98,12 @@ export function resetHeistRun() {
 }
 
 /**
- * Send one JPEG frame to the Presage scanner. `capturedAt` is performance.now()
- * at capture, so Presage sees the real spacing between frames. Calls done() when
- * the server has answered (or timed out).
+ * Send one JPEG frame to the Presage scanner (the server timestamps it on
+ * arrival). Calls done() when the server has answered (or timed out).
  */
-export function sendFrame(buf, capturedAt, done) {
+export function sendFrame(buf, done) {
   if (!socket?.connected) return done();
-  socket.timeout(3000).emit('frame', { image: buf, t: capturedAt }, (err, snap) => {
+  socket.timeout(3000).emit('frame', { image: buf }, (err, snap) => {
     if (!err) applySnapshot(snap);
     done();
   });

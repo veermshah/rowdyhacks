@@ -16,6 +16,12 @@ import sharp from 'sharp';
 sharp.concurrency(1);
 sharp.cache(false);
 const MAX_PENDING_FRAMES = 3; // CPU falling behind: drop frames instead of building lag
+// Presage rejects a frame more than 2 s after the previous one, and then keeps
+// rejecting everything after it. Pauses longer than this are squeezed down to
+// one nominal frame step so the stream it sees stays continuous.
+const MAX_FRAME_GAP_US = 1_000_000;
+const NOMINAL_FRAME_US = 33_333;
+const REJECT_STREAK_RESTART = 30; // this many rejected frames in a row -> fresh session
 
 export const GESTURES = {
   NOD_DELTA: 0.07,          // nose leaves its resting height by this many face-heights...
@@ -173,7 +179,7 @@ export class PresageSession {
     this.frameQueue = Promise.resolve();
     this.pendingFrames = 0;
     // Diagnostics for /health: what actually reaches Presage and what comes back.
-    this.stats = { framesSent: 0, framesDropped: 0, sendFrameRejected: 0, metricsPackets: 0, faceSamples: 0, validationEvents: 0, lastValidationCode: null, lastProcessingStatus: null, lastError: null };
+    this.stats = { framesSent: 0, framesDropped: 0, sendFrameRejected: 0, sendFrameErrors: 0, gapsCompressed: 0, sessionRestarts: 0, metricsPackets: 0, faceSamples: 0, validationEvents: 0, lastValidationCode: null, lastProcessingStatus: null, lastError: null };
     this.teardown = Promise.resolve();
     this.starting = null;
     this.retryAfter = 0;
@@ -213,6 +219,8 @@ export class PresageSession {
     this.error = null;
     this.hint = null;
     this.lastTsUs = 0;
+    this.tsOffsetUs = 0;
+    this.rejectStreak = 0;
     this.lastSendError = null;
     callbacks.onStatus?.();
     try {
@@ -293,21 +301,18 @@ export class PresageSession {
   }
 
   /**
-   * Queue one JPEG frame for Presage. `clientMs` is the browser capture time
-   * (performance.now()). Returns false if the frame was dropped (not scanning,
-   * or the server is behind); decoding and sendFrame happen asynchronously, in order.
+   * Queue one JPEG frame for Presage. Returns false if the frame was dropped (not
+   * scanning, not a JPEG, or the server is behind); decoding and sendFrame happen
+   * asynchronously, in arrival order.
    */
-  sendJpeg(id, jpegBytes, clientMs) {
+  sendJpeg(id, jpegBytes) {
     if (this.owner !== id || !this.sdk || this.state !== 'running') return false;
     if (this.pendingFrames >= MAX_PENDING_FRAMES) {
       this.stats.framesDropped += 1;
       return false;
     }
     if (jpegBytes.length < 4 || jpegBytes[0] !== 0xff || jpegBytes[1] !== 0xd8) return false; // not a JPEG
-    // Presage needs strictly increasing microsecond timestamps; assign on arrival.
-    let ts = Number.isFinite(clientMs) ? Math.round(clientMs * 1000) : Math.round(performance.now() * 1000);
-    if (ts <= this.lastTsUs) ts = this.lastTsUs + 1;
-    this.lastTsUs = ts;
+    const ts = this.#nextTimestamp();
     const sdk = this.sdk;
     this.pendingFrames += 1;
     this.frameQueue = this.frameQueue
@@ -316,16 +321,49 @@ export class PresageSession {
         if (this.sdk !== sdk || this.state !== 'running') return; // session ended while decoding
         const { PixelFormat } = this.sdkModule.sdk;
         const ok = sdk.sendFrame(data, info.width, info.height, info.width * 3, PixelFormat.kRGB, ts);
-        if (ok === false) this.stats.sendFrameRejected += 1;
-        else this.stats.framesSent += 1;
+        if (ok === false) {
+          this.stats.sendFrameRejected += 1;
+          this.#noteRejected(id, sdk);
+        } else {
+          this.stats.framesSent += 1;
+          this.rejectStreak = 0;
+        }
       })
       .catch((e) => {
+        this.stats.sendFrameErrors += 1;
         // Frames keep coming at 30 fps; log a failing state once, not every frame.
         if (this.lastSendError !== e.message) this.log.warn('[presage] frame dropped:', e.code ?? '', e.message);
         this.lastSendError = e.message;
+        this.#noteRejected(id, sdk);
       })
       .finally(() => { this.pendingFrames -= 1; });
     return true;
+  }
+
+  // Server monotonic clock (as Presage's docs recommend), strictly increasing,
+  // with long pauses compressed so Presage never sees a > 2 s gap.
+  #nextTimestamp() {
+    let ts = Math.round(performance.now() * 1000) - this.tsOffsetUs;
+    if (this.lastTsUs && ts - this.lastTsUs > MAX_FRAME_GAP_US) {
+      this.tsOffsetUs += ts - this.lastTsUs - NOMINAL_FRAME_US;
+      ts = this.lastTsUs + NOMINAL_FRAME_US;
+      this.stats.gapsCompressed += 1;
+    }
+    if (ts <= this.lastTsUs) ts = this.lastTsUs + 1;
+    this.lastTsUs = ts;
+    return ts;
+  }
+
+  // Presage stuck rejecting frames (for whatever reason): start a fresh session.
+  #noteRejected(id, sdk) {
+    if (this.sdk !== sdk) return;
+    this.rejectStreak += 1;
+    if (this.rejectStreak >= REJECT_STREAK_RESTART) {
+      this.log.warn(`[presage] ${this.rejectStreak} frames rejected in a row; restarting session`);
+      this.rejectStreak = 0;
+      this.stats.sessionRestarts += 1;
+      this.#restartSoon(id);
+    }
   }
 
   /** Stop scanning for `id` (challenge over, player left). */

@@ -177,11 +177,10 @@ export async function createApp({ sdkModule, apiKey = PRESAGE_API_KEY, devMode =
     socket.on('frame', (data, ack) => {
       const bytes = Buffer.isBuffer(data) ? data : Buffer.isBuffer(data?.image) ? data.image : null;
       if (!bytes || bytes.length > MAX_FRAME_BYTES) return ack?.({ error: 'bad frame' });
-      const clientMs = typeof data?.t === 'number' ? data.t : undefined;
       if (s.challenge.running) {
         s.lastFrameMs = Date.now();
         if (presage.isOwner(id) && presage.state === 'running') {
-          if (presage.sendJpeg(id, bytes, clientMs)) s.challenge.frame(now());
+          if (presage.sendJpeg(id, bytes)) s.challenge.frame(now());
         } else if (!presage.isBusyFor(id)) {
           presage.acquire(id, scannerCallbacks(id)).then((ok) => { if (ok) s.adapter.reset(); emitState(id, s); });
         }

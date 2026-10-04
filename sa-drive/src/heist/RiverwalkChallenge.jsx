@@ -97,14 +97,13 @@ function useFramePump(active, videoRef, canvasRef) {
       const video = videoRef.current;
       if (!video || video.readyState < 2 || inFlight >= MAX_IN_FLIGHT) return;
       ctx.drawImage(video, 0, 0, CAPTURE_W, CAPTURE_H);
-      const capturedAt = performance.now();
       inFlight += 1;
       canvasRef.current.toBlob(async (blob) => {
         if (!blob || stopped) {
           inFlight -= 1;
           return;
         }
-        sendFrame(await blob.arrayBuffer(), capturedAt, () => { inFlight -= 1; });
+        sendFrame(await blob.arrayBuffer(), () => { inFlight -= 1; });
       }, 'image/jpeg', 0.75);
     }, 1000 / FPS);
     return () => {
