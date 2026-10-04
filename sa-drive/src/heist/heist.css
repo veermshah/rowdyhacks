@@ -120,6 +120,7 @@
 /* ---- Alamo vault (Challenge 1) ---- */
 .al-briefing { border-left-color: var(--h-accent); background: #252d30; }
 .al-main { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.al-step-instruction { min-height: 1.5em; margin: 0; }
 
 /* Parchment-styled Archive panel. */
 .al-archive { padding: 16px 18px; border-radius: 0; background: #d5ceba; color: #3a2a12; box-shadow: none; font-family: Georgia, 'Times New Roman', serif; }
@@ -160,9 +161,9 @@
 .al-dot { width: 12px; height: 12px; border-radius: 0; border: 1px solid var(--h-muted); }
 .al-dot.done { background: var(--h-accent); border-color: var(--h-accent); }
 
-.al-lcd-preview { padding: 10px 12px; border-radius: 0; background: #141c21; border: 1px solid var(--h-line); font-family: ui-monospace, monospace; }
+.al-lcd-preview { min-height: 72px; padding: 10px 12px; border-radius: 0; background: #141c21; border: 1px solid var(--h-line); font-family: ui-monospace, monospace; }
 .al-lcd-label { font-size: 9px; letter-spacing: 2px; color: var(--h-muted); margin-bottom: 4px; }
-.al-lcd-line { font-size: 14px; line-height: 1.3; color: #bdc5ac; white-space: pre; }
+.al-lcd-line { min-height: 18px; font-size: 14px; line-height: 1.3; color: #bdc5ac; white-space: pre; }
 
 .al-hints { padding-top: 8px; border-top: 1px solid var(--h-line); }
 .al-hints h3 { margin: 0 0 6px; font-size: 10px; letter-spacing: 2px; color: var(--h-muted); }
@@ -205,4 +206,11 @@
   .heist-cash, .heist-stars, .rw-alarm { animation: none; }
   .al-code-boxes.shake { animation: none; }
   .tw-phone.alarm { animation: none; }
+}
+
+/* Keep the driving scene from moving underneath a focused challenge modal. */
+.challenge-modal-open .noir-rain-fall,
+.challenge-modal-open .noir-car-drift,
+.challenge-modal-open .noir-car-bounce {
+  animation: none !important;
 }

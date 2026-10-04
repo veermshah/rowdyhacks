@@ -100,10 +100,14 @@ export default function AlamoChallenge() {
   useAlamoSound(a);
 
   useEffect(() => {
+    document.body.classList.add('challenge-modal-open');
     closeRef.current?.focus();
     const onKey = (e) => { if (e.key === 'Escape') closeAlamo(); };
     window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    return () => {
+      document.body.classList.remove('challenge-modal-open');
+      window.removeEventListener('keydown', onKey);
+    };
   }, []);
 
   // Dev simulator: arrow keys stand in for the Pi's joystick while this
