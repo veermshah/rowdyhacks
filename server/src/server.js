@@ -13,6 +13,7 @@ import { dirname, join } from 'node:path';
 import { Server } from 'socket.io';
 import { RiverwalkChallenge, STEPS } from './challenge.js';
 import { FaceSignalAdapter, PresageSession } from './presage.js';
+import { createDebugLog } from './debugLog.js';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const envFile = join(ROOT, '.env');
@@ -25,6 +26,8 @@ const SCANNER_IDLE_RELEASE_MS = 5_000; // free the scanner if a player stops sen
 const TICK_MS = 200;
 
 const DEV_MODE = process.env.RIVERWALK_DEV_MODE !== '0'; // allows the `simulate` event
+// Detailed Presage/Riverwalk diagnostics: `npm run debug` (or PRESAGE_DEBUG=1).
+const DEBUG = process.argv.includes('--debug') || process.env.PRESAGE_DEBUG === '1';
 const PRESAGE_API_KEY = (process.env.PRESAGE_API_KEY || '').trim();
 const corsEnv = (process.env.CORS_ORIGINS || '*').split(',').map((o) => o.trim()).filter(Boolean);
 const CORS_ORIGINS = corsEnv.length === 1 && corsEnv[0] === '*' ? '*' : corsEnv;
@@ -47,8 +50,11 @@ async function loadPresageSdk() {
   }
 }
 
-export async function createApp({ sdkModule, apiKey = PRESAGE_API_KEY, devMode = DEV_MODE, logger = console } = {}) {
-  const presage = new PresageSession({ apiKey, sdkModule, logger });
+export async function createApp({
+  sdkModule, apiKey = PRESAGE_API_KEY, devMode = DEV_MODE, logger = console,
+  debug = createDebugLog({ enabled: DEBUG, dir: join(ROOT, 'logs') }),
+} = {}) {
+  const presage = new PresageSession({ apiKey, sdkModule, logger, debug });
   const cars = new Map();     // carId -> { loot, wantedLevel, riverwalkCleared }
   const sessions = new Map(); // socket.id -> { carId, challenge, adapter, lastSent, lastFrameMs }
   const now = () => performance.now() / 1000;
@@ -138,6 +144,7 @@ export async function createApp({ sdkModule, apiKey = PRESAGE_API_KEY, devMode =
       onFace: (present) => {
         const s = live();
         if (!s) return;
+        if (present !== s.challenge.faceVisible) debug('face', { present, step: s.challenge.snapshot(now()).step });
         s.challenge.face(present, now());
         applyEvents(s, s.challenge.tick(now()));
         emitState(id, s);
@@ -149,7 +156,19 @@ export async function createApp({ sdkModule, apiKey = PRESAGE_API_KEY, devMode =
         const { blinkSamples, eyesClosedSamples, blinks } = s.adapter.debug;
         Object.assign(presage.stats, { blinkSamples, eyesClosedSamples, blinks });
         if (sawFace) s.challenge.face(true, now());
-        for (const g of gestures) applyEvents(s, s.challenge.gesture(g, now()));
+        if (debug.enabled && (gestures.length || s.adapter.debug.blink)) {
+          debug('adapter', { gestures, eyesClosed: !!s.adapter.debug.blink, smile: s.adapter.debug.smile, nodDelta: s.adapter.debug.nodDelta, blinkSamples, eyesClosedSamples, blinks });
+        }
+        for (const g of gestures) {
+          const before = s.challenge.snapshot(now());
+          const events = s.challenge.gesture(g, now());
+          const after = s.challenge.snapshot(now());
+          debug('gesture', {
+            gesture: g, step: before.step, result: after.step !== before.step || after.blinks !== before.blinks || events.length ? 'accepted' : 'ignored',
+            stepAfter: after.step, blinks: after.blinks, status: after.status, events,
+          });
+          applyEvents(s, events);
+        }
         applyEvents(s, s.challenge.tick(now()));
         emitState(id, s);
       },
@@ -164,7 +183,8 @@ export async function createApp({ sdkModule, apiKey = PRESAGE_API_KEY, devMode =
 
   io.on('connection', (socket) => {
     const id = socket.id;
-    const s = { carId: 'solo', challenge: new RiverwalkChallenge(), adapter: new FaceSignalAdapter(), lastSent: null, lastFrameMs: 0 };
+    const s = { carId: 'solo', challenge: new RiverwalkChallenge(), adapter: new FaceSignalAdapter(), lastSent: null, lastFrameMs: 0, framesIn: 0, frameBytes: 0 };
+    debug('player_connected', { player: id, origin: socket.handshake.headers.origin ?? null, transport: socket.conn.transport.name });
     sessions.set(id, s);
     socket.join(room(s.carId));
 
@@ -181,6 +201,7 @@ export async function createApp({ sdkModule, apiKey = PRESAGE_API_KEY, devMode =
       const ack = args.find((a) => typeof a === 'function');
       s.challenge.start(now());
       s.adapter.reset();
+      debug('challenge_start', { player: id, car: s.carId });
       ack?.(emitState(id, s, true));
     });
 
@@ -189,6 +210,8 @@ export async function createApp({ sdkModule, apiKey = PRESAGE_API_KEY, devMode =
       if (!bytes || bytes.length > MAX_FRAME_BYTES) return ack?.({ error: 'bad frame' });
       if (s.challenge.running) {
         s.lastFrameMs = Date.now();
+        s.framesIn += 1;
+        s.frameBytes += bytes.length;
         if (presage.isOwner(id) && presage.state === 'running') {
           if (presage.sendJpeg(id, bytes)) s.challenge.frame(now());
         } else if (!presage.isBusyFor(id)) {
@@ -204,11 +227,13 @@ export async function createApp({ sdkModule, apiKey = PRESAGE_API_KEY, devMode =
       const action = typeof data === 'object' ? data?.action : data;
       if (![...STEPS, 'fail'].includes(action)) return ack?.({ error: `unknown action ${action}` });
       applyEvents(s, s.challenge.simulate(action, now()));
+      debug('simulate', { action, stepAfter: s.challenge.snapshot(now()).step });
       ack?.(emitState(id, s, true));
     });
 
     // Player left the checkpoint popup.
     socket.on('leave_checkpoint', (...args) => {
+      debug('leave_checkpoint', { player: id });
       releaseScanner(id, s);
       args.find((a) => typeof a === 'function')?.({ ok: true });
     });
@@ -228,7 +253,8 @@ export async function createApp({ sdkModule, apiKey = PRESAGE_API_KEY, devMode =
       args.find((a) => typeof a === 'function')?.({ ok: true });
     });
 
-    socket.on('disconnect', () => {
+    socket.on('disconnect', (reason) => {
+      debug('player_disconnected', { player: id, reason });
       releaseScanner(id, s);
       sessions.delete(id);
     });
@@ -245,10 +271,31 @@ export async function createApp({ sdkModule, apiKey = PRESAGE_API_KEY, devMode =
   }, TICK_MS);
   ticker.unref();
 
+  let lastStats = { ...presage.stats };
+  const frameReport = setInterval(() => {
+    if (!debug.enabled) return;
+    for (const [id, s] of sessions) {
+      if (!s.challenge.running && !presage.isOwner(id)) continue;
+      const st = presage.stats;
+      debug('frames_per_second', {
+        fromBrowser: s.framesIn, avgKB: s.framesIn ? Math.round(s.frameBytes / s.framesIn / 1024) : 0,
+        toPresage: st.framesSent - lastStats.framesSent, droppedBusy: st.framesDropped - lastStats.framesDropped,
+        rejected: st.sendFrameRejected - lastStats.sendFrameRejected, errors: st.sendFrameErrors - lastStats.sendFrameErrors,
+        gapsOver1s: st.gapsCompressed - lastStats.gapsCompressed, packetsBack: st.metricsPackets - lastStats.metricsPackets,
+        scanner: presage.status(id).sensor, step: s.challenge.snapshot(now()).step, status: s.challenge.status,
+      });
+      s.framesIn = 0;
+      s.frameBytes = 0;
+    }
+    lastStats = { ...presage.stats };
+  }, 1000);
+  frameReport.unref();
+
   return {
-    httpServer, io, presage, cars, sessions, getCar,
+    httpServer, io, presage, cars, sessions, getCar, debugFile: debug.file,
     async close() {
       clearInterval(ticker);
+      clearInterval(frameReport);
       io.close();
       await presage.teardown;
     },
@@ -265,6 +312,7 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
     console.log(`  Presage SDK: ${sdkModule ? `loaded v${sdkModule.sdk.SmartSpectraSDK.version}` : 'NOT loaded'}`
       + ` | API key: ${PRESAGE_API_KEY ? 'set' : 'MISSING (set PRESAGE_API_KEY in server/.env)'}`
       + ` | dev mode: ${DEV_MODE ? 'on' : 'off'}`);
+    if (DEBUG) console.log(`  DEBUG LOGGING ON -> ${app.debugFile}`);
   });
   const shutdown = async () => { await app.close(); process.exit(0); };
   process.on('SIGINT', shutdown);

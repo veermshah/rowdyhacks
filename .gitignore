@@ -25,3 +25,6 @@ server/skills-lock.json
 .DS_Store
 Thumbs.db
 .vscode/
+
+# Presage debug logs (npm run debug)
+server/logs/

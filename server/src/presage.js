@@ -172,8 +172,10 @@ const MULTIPLE_FACES = 2;
  * Emits through the callbacks passed to acquire().
  */
 export class PresageSession {
-  constructor({ apiKey, sdkModule, logger = console }) {
+  constructor({ apiKey, sdkModule, logger = console, debug = () => {} }) {
     this.apiKey = apiKey;
+    this.debug = debug; // see debugLog.js
+    this.lastLoggedValidation = null;
     this.sdkModule = sdkModule; // injected so tests and key-less runs don't need the native SDK
     this.log = logger;
     this.owner = null;
@@ -235,8 +237,10 @@ export class PresageSession {
       const sdk = new SmartSpectraSDK({
         apiKey: this.apiKey,
         requestedMetrics: faceMetrics, // landmarks, blinking, talking, expressions
-        logLevel: SmartSpectraLogLevel.kWarning,
+        // Debug mode also turns up the native SDK's own logging.
+        logLevel: this.debug.enabled ? SmartSpectraLogLevel.kInfo : SmartSpectraLogLevel.kWarning,
       });
+      this.debug('presage_session_start', { player: id, sdkVersion: SmartSpectraSDK.version, requestedMetrics: faceMetrics });
       sdk.on('metrics', (buf) => {
         this.stats.metricsPackets += 1;
         this.quickFailures = 0;
@@ -248,13 +252,21 @@ export class PresageSession {
           this.log.warn('[presage] could not decode metrics', e.message);
           return;
         }
-        if (Buffer.isBuffer(metrics)) return;
+        if (Buffer.isBuffer(metrics)) {
+          this.debug('presage_metrics_undecoded', { bytes: buf.length });
+          return;
+        }
+        if (this.debug.enabled) this.debug('presage_packet', summarizePacket(metrics));
         this.stats.faceSamples += (metrics.face?.landmarks?.length ?? 0) + (metrics.face?.blinking?.length ?? 0) + (metrics.face?.expression?.length ?? 0);
         callbacks.onMetrics?.(metrics);
       });
       sdk.on('validationStatus', (code) => {
         this.stats.validationEvents += 1;
         this.stats.lastValidationCode = code;
+        if (code !== this.lastLoggedValidation) {
+          this.lastLoggedValidation = code;
+          this.debug('presage_validation', { code, meaning: code === 0 ? 'ok' : HINTS[code] ?? 'other' });
+        }
         if (this.owner !== id) return;
         this.hint = code === 0 ? null : HINTS[code] ?? null;
         if (code === NO_FACE) callbacks.onFace?.(false);
@@ -263,12 +275,14 @@ export class PresageSession {
       });
       sdk.on('processingStatus', (status) => {
         this.stats.lastProcessingStatus = status;
+        this.debug('presage_processing_status', { status, name: ['uninitialized', 'idle', 'starting', 'running', 'stopping', 'error'][status] ?? status });
         if (this.owner !== id) return;
         if (status === 3) this.state = 'running'; // ProcessingStatus.kRunning
         callbacks.onStatus?.();
       });
       sdk.on('error', (code, message, retryable) => {
         this.stats.lastError = `${code}: ${message}`;
+        this.debug('presage_error', { code, message, retryable, secondsSinceStart: Math.round((Date.now() - this.sessionStartedAt) / 100) / 10 });
         if (this.owner !== id) return;
         this.log.warn(`[presage] error ${code}: ${message} (retryable=${retryable})`);
         this.#setError(code, message);
@@ -283,6 +297,7 @@ export class PresageSession {
             this.retryAfter = Date.now() + 15_000;
             this.quickFailures = 0;
             this.log.warn('[presage] sessions keep failing right after start; backing off 15 s');
+            this.debug('presage_backoff', { seconds: 15 });
           }
         } else {
           this.release(id);
@@ -388,6 +403,7 @@ export class PresageSession {
 
   /** Stop scanning for `id` (challenge over, player left). */
   release(id) {
+    if (this.owner === id) this.debug('presage_session_release', { player: id, state: this.state });
     if (this.owner !== id) return;
     const sdk = this.sdk;
     this.owner = null;
@@ -410,4 +426,23 @@ export class PresageSession {
     if (this.owner !== id) return { sensor: this.state === 'error' ? 'error' : 'off', sensorError: this.state === 'error' ? this.error : null, hint: null };
     return { sensor: this.state, sensorError: this.state === 'error' ? this.error : null, hint: this.hint };
   }
+}
+
+// Compact, loggable view of one Presage Metrics packet (debug mode only).
+function summarizePacket(metrics) {
+  const f = metrics?.face ?? {};
+  const sec = (ts) => Math.round(num(ts) / 1e4) / 100; // capture time in seconds
+  const names = ['UNSPECIFIED', 'ANGRY', 'CONTEMPT', 'DISGUST', 'FEAR', 'HAPPY', 'NEUTRAL', 'SAD', 'SURPRISE'];
+  const exprName = (t) => (typeof t === 'string' ? t : names[t] ?? t);
+  return {
+    landmarks: (f.landmarks ?? []).length,
+    landmarkPoints: f.landmarks?.at(-1)?.value?.length ?? 0,
+    blinking: (f.blinking ?? []).map((b) => ({ t: sec(b.timestamp), closed: !!b.detected, stable: !!b.stable })),
+    talking: (f.talking ?? []).filter((x) => x.detected).length,
+    expression: (f.expression ?? []).map((e) => {
+      const scores = (e.scores ?? []).map((x) => ({ type: exprName(x.type), c: Math.round(num(x.confidence)) }));
+      const top = scores.reduce((a, b) => (b.c > (a?.c ?? -1) ? b : a), null);
+      return { t: sec(e.timestamp), top: top ? top.type + ':' + top.c : '-', happy: scores.find((x) => x.type === 'HAPPY')?.c ?? 0 };
+    }),
+  };
 }
