@@ -157,7 +157,7 @@ export default function RiverwalkChallenge({ videoRef: sharedVideoRef }) {
         </blockquote>
 
         {!heist.connected && (
-          <p className="rw-banner">Heist server offline at {HEIST_SERVER_URL}. Start it with <code>python app.py</code> in <code>/server</code>.</p>
+          <p className="rw-banner">Heist server offline at {HEIST_SERVER_URL}. Start it with <code>npm start</code> in <code>/server</code>.</p>
         )}
 
         <div className="rw-body">

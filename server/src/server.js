@@ -28,6 +28,11 @@ const DEV_MODE = process.env.RIVERWALK_DEV_MODE !== '0'; // allows the `simulate
 const PRESAGE_API_KEY = (process.env.PRESAGE_API_KEY || '').trim();
 const corsEnv = (process.env.CORS_ORIGINS || '*').split(',').map((o) => o.trim()).filter(Boolean);
 const CORS_ORIGINS = corsEnv.length === 1 && corsEnv[0] === '*' ? '*' : corsEnv;
+// Pages served from this machine (any port, localhost or 127.0.0.1) are always
+// allowed, so local testing works whichever port Vite picked.
+const LOCAL_ORIGIN = /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/;
+export const originAllowed = (origin) =>
+  CORS_ORIGINS === '*' || !origin || LOCAL_ORIGIN.test(origin) || CORS_ORIGINS.includes(origin);
 
 async function loadPresageSdk() {
   try {
@@ -56,8 +61,8 @@ export async function createApp({ sdkModule, apiKey = PRESAGE_API_KEY, devMode =
 
   const httpServer = createServer((req, res) => {
     const origin = req.headers.origin;
-    if (CORS_ORIGINS === '*' || (origin && CORS_ORIGINS.includes(origin))) {
-      res.setHeader('Access-Control-Allow-Origin', CORS_ORIGINS === '*' ? '*' : origin);
+    if (originAllowed(origin)) {
+      res.setHeader('Access-Control-Allow-Origin', CORS_ORIGINS === '*' || !origin ? '*' : origin);
     }
     if (req.url === '/health' || req.url === '/') {
       res.setHeader('Content-Type', 'application/json');
@@ -78,7 +83,10 @@ export async function createApp({ sdkModule, apiKey = PRESAGE_API_KEY, devMode =
     res.end();
   });
 
-  const io = new Server(httpServer, { cors: { origin: CORS_ORIGINS }, maxHttpBufferSize: MAX_FRAME_BYTES * 2 });
+  const io = new Server(httpServer, {
+    cors: { origin: (origin, cb) => cb(null, originAllowed(origin)) },
+    maxHttpBufferSize: MAX_FRAME_BYTES * 2,
+  });
   const room = (carId) => `car:${carId}`;
   const broadcastCar = (carId) => io.to(room(carId)).emit('car_state', carDict(carId));
 
