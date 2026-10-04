@@ -4,8 +4,8 @@ Minimal flow, no rounds/hints/heat:
 
     ALAMO_COVER (waiting for the camera - a light sensor - to be blinded)
     -> ALAMO_SHOW (vault LCD plays a 4-move sequence)
-    -> ALAMO_INPUT (player repeats it on the joystick; a mistake or the
-       camera being spotted sends it back to ALAMO_COVER/ALAMO_SHOW to retry)
+    -> ALAMO_INPUT (player repeats it on the joystick; the initial cover is
+       latched for the rest of the sequence)
     -> ALAMO_CODE (vault speaks a keyword)
     -> ALAMO_DONE (hacker typed the matching code on the website)
 
@@ -273,17 +273,12 @@ class AlamoChallenge:
             self.is_covered = False
 
         # Checked against the current value every call (not just on the edge
-        # where is_covered just flipped), so a substage freshly (re-)entered
-        # while already blind/spotted - e.g. an admin reset mid-hold - still
-        # transitions, instead of waiting forever for a change that already happened.
+        # where is_covered just flipped), so a substage freshly re-entered
+        # while already blind still transitions without waiting for a new
+        # sensor change.
         if self.status == "cover" and self.is_covered:
             self._begin_show(now)
             return []
-        if self.status in ("show", "input") and not self.is_covered:
-            self.progress = 0
-            self._enter_cover(now)
-            self._trigger_event(*LCD_STATUS["spotted"], now, EVENT_MESSAGE_S, flash=True)
-            return ["spotted"]
         return []
 
     # ------------------------------------------------------------------ #

@@ -89,7 +89,7 @@ def test_resetting_while_still_physically_covered_transitions_immediately():
     assert ch.is_covered is True and ch.status == "show"
 
 
-def test_spotted_mid_sequence_resets_to_cover():
+def test_cover_remains_latched_after_sensor_is_uncovered():
     ch = new_challenge()
     ch.start(0.0)
     t = cover(ch, 0.0)
@@ -97,8 +97,11 @@ def test_spotted_mid_sequence_resets_to_cover():
     ch.handle_input("light", SPOTTED_ABOVE + 50, t)
     t += SPOTTED_HOLD_S + 0.1
     events = ch.tick(t)
-    assert "spotted" in events
-    assert ch.status == "cover"
+    assert "spotted" not in events
+    assert ch.status == "show"
+    t = ch._show_end_at + 0.01
+    ch.tick(t)
+    assert ch.status == "input"
 
 
 # --------------------------------------------------------------------------- #

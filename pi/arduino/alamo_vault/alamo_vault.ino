@@ -12,7 +12,7 @@ const int JOY_Y_PIN = A2;
 const int JOY_BUTTON_PIN = 2;  // the joystick button: reported on the serial line, and the Tower challenge uses it to submit the code
 const int SERVO_PIN = 9;
 
-const int SERVO_CLOSED_ANGLE = 90;
+const int SERVO_CLOSED_ANGLE = 10;
 
 bool lcdWorking = false;
 int servoAngle = SERVO_CLOSED_ANGLE;

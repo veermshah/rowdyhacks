@@ -16,7 +16,7 @@ documented in `server/alamo_challenge.py`.
    `X: ... Y: ... Light: ... Servo: ... Button: ...` line every ~150ms. The
    LCD shows the same live X/Y/Light readout until the Pi sends a real `LCD:`
    command, at which point the Pi owns the screen. The servo sits at a fixed
-   closed position (90°) and only moves when the Pi sends `SERVO:<angle>` -
+   closed position (10°) and only moves when the Pi sends `SERVO:<angle>` -
    it no longer follows the joystick (that was a wiring-test-only behavior;
    the servo is the vault lock now, server-controlled only).
 
