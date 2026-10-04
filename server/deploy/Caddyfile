@@ -1,5 +1,0 @@
-# Caddy gets a Let's Encrypt certificate for DOMAIN automatically and proxies
-# HTTPS + WebSocket (Socket.IO) traffic to the Presage server.
-{$DOMAIN} {
-	reverse_proxy presage:5000
-}
