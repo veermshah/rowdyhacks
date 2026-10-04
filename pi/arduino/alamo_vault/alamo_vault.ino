@@ -30,6 +30,14 @@ bool lcdOverrideActive = false;
 // have) is ignored - the Pi already drops those before sending.
 String cmdBuffer;
 
+void writeLcdLine(uint8_t row, String text) {
+  if (text.length() > 16) text.remove(16);
+  lcd.setCursor(0, row);
+  for (uint8_t i = 0; i < 16; i++) {
+    lcd.write(i < text.length() ? text[i] : ' ');
+  }
+}
+
 void applyCommand(const String &line) {
   int sep = line.indexOf(':');
   if (sep < 0) return;
@@ -42,14 +50,8 @@ void applyCommand(const String &line) {
     String line2 = bar >= 0 ? payload.substring(bar + 1) : "";
     lcdOverrideActive = true;
     if (lcdWorking) {
-      lcd.setCursor(0, 0);
-      lcd.print("                ");
-      lcd.setCursor(0, 0);
-      lcd.print(line1);
-      lcd.setCursor(0, 1);
-      lcd.print("                ");
-      lcd.setCursor(0, 1);
-      lcd.print(line2);
+      writeLcdLine(0, line1);
+      writeLcdLine(1, line2);
     }
   } else if (tag == "SERVO") {
     servoAngle = constrain(payload.toInt(), 0, 180);
@@ -123,18 +125,7 @@ void loop() {
   // Once the Pi has sent a real LCD command, it owns the screen; until then
   // keep showing the live sensor readout (handy for standalone wiring tests).
   if (lcdWorking && !lcdOverrideActive) {
-    lcd.setCursor(0, 0);
-    lcd.print("                ");
-    lcd.setCursor(0, 0);
-    lcd.print("X:");
-    lcd.print(x);
-    lcd.print(" Y:");
-    lcd.print(y);
-
-    lcd.setCursor(0, 1);
-    lcd.print("                ");
-    lcd.setCursor(0, 1);
-    lcd.print("Light:");
-    lcd.print(light);
+    writeLcdLine(0, String("X:") + x + " Y:" + y);
+    writeLcdLine(1, String("Light:") + light);
   }
 }

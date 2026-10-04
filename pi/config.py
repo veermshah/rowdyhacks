@@ -47,7 +47,7 @@ TTS_AUDIO_SINK = os.getenv("ALAMO_TTS_AUDIO_SINK", "").strip()
 LIGHT_MIN_SEND_DELTA = _int("ALAMO_LIGHT_DELTA", 4)
 
 # Degrees the servo moves to when the server sends {"type": "servo", "state": "open"}.
-SERVO_OPEN_ANGLE = _int("ALAMO_SERVO_OPEN_ANGLE", 170)
-SERVO_CLOSED_ANGLE = _int("ALAMO_SERVO_CLOSED_ANGLE", 10)
+SERVO_OPEN_ANGLE = _int("ALAMO_SERVO_OPEN_ANGLE", 180)
+SERVO_CLOSED_ANGLE = _int("ALAMO_SERVO_CLOSED_ANGLE", 0)
 
 RECONNECT_DELAY_S = 2.0
