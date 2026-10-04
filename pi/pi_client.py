@@ -13,10 +13,12 @@ Start on boot via the included systemd unit (alamo-pi.service) so the relay
 is always running before anyone opens the game in a browser.
 """
 import logging
+import io
 import shutil
 import subprocess
 import threading
 import time
+import wave
 
 import socketio
 
@@ -52,12 +54,59 @@ def _speak(text):
         )
         return
     log.info("Received speak command; playing keyword through %s", config.TTS_COMMAND)
-    threading.Thread(
-        target=subprocess.run,
-        args=([executable, text],),
-        kwargs={"check": False, "stdout": subprocess.DEVNULL, "stderr": subprocess.PIPE},
-        daemon=True,
-    ).start()
+    threading.Thread(target=_play_speech, args=(executable, text), daemon=True).start()
+
+
+def _play_speech(executable, text):
+    """Play speech with silence at the start of the same PCM stream.
+
+    Bluetooth speakers can discard the beginning of a newly opened stream
+    while waking up. Generating speech first lets us prepend silence without
+    changing the spoken keyword.
+    """
+    player = shutil.which("aplay")
+    if player is None or config.TTS_COMMAND != "espeak-ng":
+        subprocess.run(
+            [executable, text],
+            check=False,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+        )
+        return
+
+    rendered = subprocess.run(
+        [executable, "--stdout", text],
+        check=False,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    if rendered.returncode != 0:
+        log.error("Speech rendering failed with exit code %d", rendered.returncode)
+        return
+
+    try:
+        source = wave.open(io.BytesIO(rendered.stdout), "rb")
+        params = source.getparams()
+        frames = source.readframes(source.getnframes())
+        source.close()
+        silence_frames = int(params.framerate * max(0.0, config.TTS_LEAD_IN_S))
+        silence = b"\0" * silence_frames * params.nchannels * params.sampwidth
+        output = io.BytesIO()
+        with wave.open(output, "wb") as target:
+            target.setparams(params)
+            target.writeframes(silence + frames)
+    except (EOFError, wave.Error) as exc:
+        log.warning("Speech audio could not be prepared (%s); using direct playback", exc)
+        subprocess.run([executable, text], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+        return
+
+    subprocess.run(
+        [player, "-q"],
+        input=output.getvalue(),
+        check=False,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.PIPE,
+    )
 
 
 @sio.event
