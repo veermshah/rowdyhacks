@@ -13,6 +13,7 @@ services:
   - type: web
     name: lootrun-server
     runtime: python
+    plan: free
     rootDir: server
     buildCommand: pip install -r requirements.txt && python download_assets.py
     startCommand: gunicorn -k eventlet -w 1 -b 0.0.0.0:$PORT app:app
