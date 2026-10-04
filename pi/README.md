@@ -12,11 +12,13 @@ documented in `server/alamo_challenge.py`.
 1. Open `arduino/alamo_vault/alamo_vault.ino` in the Arduino IDE.
 2. Install the `hd44780` library (Library Manager) if you haven't already.
 3. Select the Uno's board/port and upload.
-4. Open the Serial Monitor at 9600 baud to sanity check: you should see the
-   same `X: ... Y: ... Light: ... Servo: ... Button: ...` line as before,
-   and the servo should still follow the joystick - this sketch behaves
-   exactly like the original wiring test until the Pi sends it a real
-   `LCD:` or `SERVO:` command.
+4. Open the Serial Monitor at 9600 baud to sanity check: you should see a
+   `X: ... Y: ... Light: ... Servo: ... Button: ...` line every ~150ms. The
+   LCD shows the same live X/Y/Light readout until the Pi sends a real `LCD:`
+   command, at which point the Pi owns the screen. The servo sits at a fixed
+   closed position (90°) and only moves when the Pi sends `SERVO:<angle>` -
+   it no longer follows the joystick (that was a wiring-test-only behavior;
+   the servo is the vault lock now, server-controlled only).
 
 ## Raspberry Pi side
 
