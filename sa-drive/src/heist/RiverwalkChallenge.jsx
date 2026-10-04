@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import {
-  closeRiverwalk, restartChallenge, sendFrame, simulate, useHeist,
+  closeRiverwalk, devReplayRiverwalk, restartChallenge, sendFrame, simulate, useHeist,
 } from '../game/heist.js';
 import { HEIST_DEV_TOOLS, HEIST_SERVER_URL } from '../config/heistConfig.js';
 
@@ -134,10 +134,14 @@ export default function RiverwalkChallenge({ videoRef: sharedVideoRef }) {
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
-  const checklist = ch?.checklist ?? { face: false, nod: false, blink: false, smile: false };
-  const done = status === 'complete';
   const paused = running && (status === 'paused' || camera.state === 'lost');
   const reward = heist.lastReward?.source === 'riverwalk_vault' ? heist.lastReward : null;
+  // "cleared": this run's vault was emptied before - finishing again pays nothing.
+  // "complete": the crew just cracked it and got paid.
+  const cleared = status === 'complete' && heist.riverwalkCleared && !(reward?.amount > 0);
+  const done = status === 'complete' && !cleared;
+  const allChecked = { face: true, nod: true, blink: true, smile: true };
+  const checklist = cleared ? allChecked : ch?.checklist ?? { face: false, nod: false, blink: false, smile: false };
 
   return (
     <div className="rw-backdrop">
@@ -174,7 +178,7 @@ export default function RiverwalkChallenge({ videoRef: sharedVideoRef }) {
                 )}
               </>
             )}
-            {(camera.state === 'starting' || camera.state === 'error') && (
+            {(camera.state === 'starting' || camera.state === 'error') && !done && !cleared && (
               <div className="rw-cam-overlay">
                 <p>{camera.state === 'starting' ? 'Starting camera...' : camera.error}</p>
                 {camera.state === 'error' && <button className="rw-btn" onClick={retryCamera}>Retry camera</button>}
@@ -197,14 +201,18 @@ export default function RiverwalkChallenge({ videoRef: sharedVideoRef }) {
             {done && (
               <div className="rw-cam-overlay rw-done">
                 <strong>VAULT OPEN</strong>
-                {reward ? (
-                  <p className="rw-reward">
-                    <span>+{money(reward.amount)} Riverwalk loot</span>
-                    {reward.amount > 0 && <span className="rw-heat">Wanted level +1 ★</span>}
-                  </p>
-                ) : (
-                  <p>This checkpoint is already cleared.</p>
-                )}
+                <p className="rw-reward">
+                  <span>+{money(reward?.amount)} Riverwalk loot</span>
+                  <span className="rw-heat">Wanted level +1 ★</span>
+                </p>
+              </div>
+            )}
+            {cleared && (
+              <div className="rw-cam-overlay rw-cleared">
+                <span className="rw-cleared-badge">ALREADY ROBBED</span>
+                <strong>VAULT EMPTY</strong>
+                <p>Your crew already cleaned out the Riverwalk vault this run. Restart the run (press R) to hit it again.</p>
+                <p className="rw-muted">Loot so far: {money(heist.cash)}</p>
               </div>
             )}
           </section>
@@ -232,7 +240,7 @@ export default function RiverwalkChallenge({ videoRef: sharedVideoRef }) {
               ))}
             </div>
 
-            {ch?.message && !done && <p className="rw-message" aria-live="polite">{ch.message}</p>}
+            {ch?.message && !done && !cleared && <p className="rw-message" aria-live="polite">{ch.message}</p>}
 
             {status === 'alarm' && (
               <div className="rw-actions">
@@ -243,10 +251,8 @@ export default function RiverwalkChallenge({ videoRef: sharedVideoRef }) {
             {status === 'idle' && heist.connected && (
               <button className="rw-btn rw-btn-wide" onClick={restartChallenge}>Start checkpoint</button>
             )}
-            {done && (
-              <>
-                <button className="rw-btn rw-btn-wide" onClick={closeRiverwalk}>Back to the road</button>
-              </>
+            {(done || cleared) && (
+              <button className="rw-btn rw-btn-wide" onClick={closeRiverwalk}>Back to the road</button>
             )}
 
             {HEIST_DEV_TOOLS && (
@@ -254,10 +260,13 @@ export default function RiverwalkChallenge({ videoRef: sharedVideoRef }) {
                 <h3>DEV simulation</h3>
                 <div className="rw-dev-grid">
                   {DEV_ACTIONS.map(([action, label]) => (
-                    <button key={action} className={`rw-dev-btn ${action === 'fail' ? 'fail' : ''}`} onClick={() => simulate(action)} disabled={!heist.connected}>
+                    <button key={action} className={`rw-dev-btn ${action === 'fail' ? 'fail' : ''}`} onClick={() => simulate(action)} disabled={!heist.connected || cleared}>
                       {label}
                     </button>
                   ))}
+                  <button className="rw-dev-btn" onClick={devReplayRiverwalk} disabled={!heist.connected}>
+                    Replay (reset this run)
+                  </button>
                 </div>
                 <button className="rw-link" onClick={() => setShowSensors((v) => !v)}>
                   {showSensors ? 'Hide' : 'Show'} sensor readout

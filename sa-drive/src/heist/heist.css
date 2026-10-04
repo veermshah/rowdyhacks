@@ -54,6 +54,9 @@
 .rw-paused strong { color: var(--h-warn); }
 .rw-alarm { background: #4a0010d9; animation: rw-strobe .8s infinite; }
 .rw-done { background: #00382cd9; }
+.rw-cleared { background: #0b1622e6; }
+.rw-cleared strong { color: var(--h-muted); }
+.rw-cleared-badge { padding: 3px 10px; border: 1px solid var(--h-muted); border-radius: 999px; font-size: 10px; letter-spacing: 2px; color: var(--h-muted); }
 .rw-done strong { color: var(--h-cash); font-size: clamp(30px, 6vw, 46px); }
 .rw-reward { display: flex; flex-direction: column; gap: 6px; font-size: 18px; font-weight: 700; }
 .rw-heat { color: #ff8095; }

@@ -91,6 +91,14 @@ export function simulate(action) {
   socket?.emit('simulate', { action }, applySnapshot);
 }
 
+/** Dev: wipe this run's heist (loot, wanted level, vault) and restart the checkpoint; the popup stays open. */
+export function devReplayRiverwalk() {
+  socket?.emit('reset_car', () => {
+    set({ alarm: null, lastReward: null, challenge: null, cash: 0, wantedLevel: 0, riverwalkCleared: false });
+    socket?.emit('start_challenge', applySnapshot);
+  });
+}
+
 /** New run (game restarted): close the popup and wipe this car's loot, wanted level and vault. */
 export function resetHeistRun() {
   set({ riverwalkOpen: false, alarm: null, lastReward: null, challenge: null, cash: 0, wantedLevel: 0, riverwalkCleared: false });
