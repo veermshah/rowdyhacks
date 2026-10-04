@@ -19,6 +19,11 @@ BAUD_RATE = _int("ALAMO_BAUD_RATE", 9600)
 
 SERVER_URL = os.getenv("ALAMO_SERVER_URL", "http://localhost:5000")
 CAR_ID = os.getenv("ALAMO_CAR_ID", "solo")
+# Render's free proxy reliably supports Socket.IO polling. Keep WebSocket as
+# an opt-in because a failed upgrade can look like a failed initial connect.
+SOCKETIO_TRANSPORT = os.getenv("ALAMO_SOCKETIO_TRANSPORT", "polling").strip().lower()
+if SOCKETIO_TRANSPORT not in ("polling", "websocket"):
+    raise ValueError("ALAMO_SOCKETIO_TRANSPORT must be 'polling' or 'websocket'")
 
 # Matches the dead-zone the Arduino sketch already uses for its own
 # joystick-follow servo logic (see alamo_vault.ino).

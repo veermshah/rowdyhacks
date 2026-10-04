@@ -4,11 +4,13 @@ import { toLocal } from './worldConfig.js';
 // import.meta.env is Vite-only; plain Node (scripts/validate-*.mjs) imports this too.
 const env = import.meta.env ?? {};
 
-// Riverwalk server (see /server). Set VITE_HEIST_SERVER_URL on Vercel. For a demo
-// with the server on your own laptop, open the game with ?server=http://localhost:5000
-// (Chrome allows an https page to talk to localhost).
+// Riverwalk/Alamo server (see /server). Override with VITE_HEIST_SERVER_URL
+// when deploying a different backend. For a demo with the server on your own
+// laptop, open the game with ?server=http://localhost:5000 (Chrome allows an
+// https page to talk to localhost).
 const serverParam = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('server') : null;
-export const HEIST_SERVER_URL = serverParam || env.VITE_HEIST_SERVER_URL || 'http://localhost:5000';
+const defaultServerUrl = env.DEV ? 'http://localhost:5000' : 'https://lootrun-server-haht.onrender.com';
+export const HEIST_SERVER_URL = serverParam || env.VITE_HEIST_SERVER_URL || defaultServerUrl;
 
 // Dev-only UI inside the popup (Simulate buttons, sensor readout). On in
 // `npm run dev`, off in production builds unless VITE_HEIST_DEV_TOOLS=true.

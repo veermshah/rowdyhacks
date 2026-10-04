@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import {
-  closeAlamo, alamoRequestHint, alamoSubmitCode, alamoAdminSkip, alamoAdminReset,
+  closeAlamo, alamoSubmitCode, alamoAdminSkip, alamoAdminReset,
   alamoAdminShowSequence, alamoAdminShowCode, alamoSimInput, useHeist,
 } from '../game/heist.js';
 import { HEIST_DEV_TOOLS } from '../config/heistConfig.js';
@@ -11,35 +11,6 @@ import useAlamoSound from './useAlamoSound.js';
 const LIGHT_BLIND_THRESHOLD = 100;
 const LIGHT_MAX = 1023;
 const KEY_TO_MOVE = { ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right' };
-
-/** Renders `**bold**` spans from the config's fact text - no markdown library needed. */
-function Bold({ text }) {
-  const parts = text.split('**');
-  return (
-    <>
-      {parts.map((part, i) => (i % 2 === 1 ? <strong key={i}>{part}</strong> : <span key={i}>{part}</span>))}
-    </>
-  );
-}
-
-function Archive({ archive }) {
-  if (!archive) return null;
-  return (
-    <div className="al-archive">
-      <div className="al-archive-head">
-        <span className="al-archive-kicker">The Alamo Archive</span>
-        <h3>{archive.title}</h3>
-      </div>
-      <ul className="al-archive-facts">
-        {archive.facts.map((f, i) => <li key={i}><Bold text={f} /></li>)}
-      </ul>
-      <div className="al-archive-divider" />
-      <ul className="al-archive-facts al-archive-distractors">
-        {archive.distractors.map((f, i) => <li key={i}><Bold text={f} /></li>)}
-      </ul>
-    </div>
-  );
-}
 
 function CodeEntry({ locked, codeLength = 4, onSubmit }) {
   const [digits, setDigits] = useState('');
@@ -120,6 +91,13 @@ export default function AlamoChallenge() {
   const substage = a?.substage ?? 'ALAMO_IDLE';
   const done = substage === 'ALAMO_DONE';
   const codeUnlocked = substage === 'ALAMO_CODE';
+  const stepText = {
+    ALAMO_COVER: 'Step 1: Cover the light sensor.',
+    ALAMO_SHOW: 'Step 2: Watch the four-move sequence.',
+    ALAMO_INPUT: 'Step 2: Repeat the sequence on the joystick.',
+    ALAMO_CODE: 'Step 3: Enter the four-digit code shown on the vault.',
+    ALAMO_DONE: 'Challenge complete.',
+  }[substage] || 'Cover the light sensor to begin.';
 
   useAlamoSound(a);
 
@@ -189,7 +167,7 @@ export default function AlamoChallenge() {
 
         <div className="rw-body">
           <section className="al-main">
-            <Archive archive={a?.archive} />
+            <p className="al-step-instruction">{stepText}</p>
             <CodeEntry locked={!codeUnlocked} codeLength={a?.codeLength ?? 4} onSubmit={alamoSubmitCode} />
             {done && (
               <div className="al-done-banner">
@@ -208,16 +186,11 @@ export default function AlamoChallenge() {
               <div className="al-light-bar-threshold" style={{ left: `${thresholdPct}%` }} />
             </div>
 
-            <div className="al-round-row">
-              <span>Round {a?.round || 0}/3</span>
-            </div>
             <div className="al-progress-dots" aria-label={`Progress ${a?.progress ?? 0} of ${a?.sequenceLength ?? 0}`}>
               {Array.from({ length: a?.sequenceLength || 0 }, (_, i) => (
                 <span key={i} className={`al-dot ${i < (a?.progress ?? 0) ? 'done' : ''}`} />
               ))}
             </div>
-
-            <div className="rw-attempts">Mistakes: {a?.mistakes ?? 0} &nbsp;&middot;&nbsp; Heat: {a?.heat ?? 0}</div>
 
             <div className="al-lcd-preview">
               <div className="al-lcd-label">VAULT LCD</div>
@@ -225,19 +198,6 @@ export default function AlamoChallenge() {
               <div className="al-lcd-line">{a?.currentLcdText?.[1] ?? ''}</div>
             </div>
 
-            {!!a?.hintsScreen?.length && (
-              <div className="al-hints">
-                <h3>Hints</h3>
-                <ul>
-                  {a.hintsScreen.map((h, i) => <li key={i}>{h}</li>)}
-                </ul>
-              </div>
-            )}
-            {!done && (
-              <button className="rw-btn rw-btn-wide" onClick={alamoRequestHint} disabled={!heist.connected}>
-                Request hint (+1 heat)
-              </button>
-            )}
             {done && <button className="rw-btn rw-btn-wide" onClick={closeAlamo}>Back to the road</button>}
 
             {HEIST_DEV_TOOLS && (

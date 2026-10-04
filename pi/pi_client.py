@@ -85,10 +85,22 @@ def main():
     threading.Thread(target=_serial_loop, daemon=True).start()
     while True:
         try:
-            sio.connect(config.SERVER_URL, transports=["websocket", "polling"])
+            # Polling is the reliable transport through Render's free proxy.
+            # WebSocket remains available as an explicit opt-in.
+            sio.connect(
+                config.SERVER_URL,
+                transports=[config.SOCKETIO_TRANSPORT],
+                wait_timeout=10,
+            )
             sio.wait()
         except Exception as exc:  # python-socketio raises a plain Exception on connect failure
-            log.warning("Connect to %s failed (%s), retrying in %.0fs", config.SERVER_URL, exc, config.RECONNECT_DELAY_S)
+            log.warning(
+                "Connect to %s using %s failed (%r), retrying in %.0fs",
+                config.SERVER_URL,
+                config.SOCKETIO_TRANSPORT,
+                exc,
+                config.RECONNECT_DELAY_S,
+            )
             time.sleep(config.RECONNECT_DELAY_S)
 
 

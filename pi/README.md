@@ -52,8 +52,17 @@ python pi_client.py
 ```
 
 You should see a `Connected to ... joining as Pi relay` log line, then
-`Connected to Arduino on /dev/ttyACM0`. Move the joystick past center and
-back - you should see no spam, just one move per gesture.
+`Connected to Arduino on /dev/ttyACM0`. The relay starts Socket.IO with HTTP
+polling (and upgrades to WebSocket when available), which is more reliable
+through Render's proxy. Move the joystick past center and back - you should
+see no spam, just one move per gesture.
+
+The deployed backend for this repository is:
+`https://lootrun-server-haht.onrender.com`. Put that value in
+`ALAMO_SERVER_URL` in `pi/.env`; do not use the old Presage service URL.
+Keep `ALAMO_SOCKETIO_TRANSPORT=polling` for Render. This avoids a failed
+WebSocket upgrade on networks or proxies that only support the polling
+transport.
 
 ## Run on boot
 
