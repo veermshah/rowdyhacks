@@ -66,12 +66,16 @@ def _play_speech(executable, text):
     """
     player = shutil.which("aplay")
     if player is None or config.TTS_COMMAND != "espeak-ng":
-        subprocess.run(
+        log.info("Playing speech directly with %s%s", executable, " (aplay unavailable)" if player is None else "")
+        result = subprocess.run(
             [executable, text],
             check=False,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.PIPE,
+            text=True,
         )
+        if result.returncode != 0:
+            log.error("Speech playback failed with exit code %d: %s", result.returncode, result.stderr.strip())
         return
 
     rendered = subprocess.run(
@@ -81,7 +85,7 @@ def _play_speech(executable, text):
         stderr=subprocess.PIPE,
     )
     if rendered.returncode != 0:
-        log.error("Speech rendering failed with exit code %d", rendered.returncode)
+        log.error("Speech rendering failed with exit code %d: %s", rendered.returncode, rendered.stderr.decode(errors="replace").strip())
         return
 
     try:
@@ -97,16 +101,27 @@ def _play_speech(executable, text):
             target.writeframes(silence + frames)
     except (EOFError, wave.Error) as exc:
         log.warning("Speech audio could not be prepared (%s); using direct playback", exc)
-        subprocess.run([executable, text], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+        result = subprocess.run(
+            [executable, text],
+            check=False,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        if result.returncode != 0:
+            log.error("Fallback speech playback failed with exit code %d: %s", result.returncode, result.stderr.strip())
         return
 
-    subprocess.run(
+    log.info("Playing speech through %s with %.1fs lead-in", player, config.TTS_LEAD_IN_S)
+    result = subprocess.run(
         [player, "-q"],
         input=output.getvalue(),
         check=False,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.PIPE,
     )
+    if result.returncode != 0:
+        log.error("Audio device playback failed with exit code %d: %s", result.returncode, result.stderr.decode(errors="replace").strip())
 
 
 @sio.event
