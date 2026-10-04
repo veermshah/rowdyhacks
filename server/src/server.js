@@ -146,6 +146,8 @@ export async function createApp({ sdkModule, apiKey = PRESAGE_API_KEY, devMode =
         const s = live();
         if (!s) return;
         const { gestures, sawFace } = s.adapter.ingest(metrics);
+        const { blinkSamples, eyesClosedSamples, blinks } = s.adapter.debug;
+        Object.assign(presage.stats, { blinkSamples, eyesClosedSamples, blinks });
         if (sawFace) s.challenge.face(true, now());
         for (const g of gestures) applyEvents(s, s.challenge.gesture(g, now()));
         applyEvents(s, s.challenge.tick(now()));

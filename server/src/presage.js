@@ -87,8 +87,11 @@ export class FaceSignalAdapter {
     this.blinkOn = false;
     this.lastBlinkT = -Infinity;
     this.happySamples = 0;
-    this.lastSampleT = -Infinity; // packets can overlap; skip samples already seen
-    this.debug = { blink: 0, smile: 0, nodDelta: 0 };
+    // Packets can overlap, so skip samples already seen - tracked per metric:
+    // Presage computes blinks/expressions behind the landmarks, so a later
+    // packet's blink samples can be older than landmarks already processed.
+    this.lastT = { landmarks: -Infinity, blinking: -Infinity, expression: -Infinity };
+    this.debug = { blink: 0, smile: 0, nodDelta: 0, blinkSamples: 0, eyesClosedSamples: 0, blinks: 0 };
   }
 
   /**
@@ -100,37 +103,39 @@ export class FaceSignalAdapter {
     if (!face) return { gestures: [], sawFace: false };
     const events = []; // [t, gesture]
     let sawFace = false;
-    let newest = this.lastSampleT;
+    const fresh = (kind, samples) => {
+      const out = [...(samples ?? [])].filter((x) => num(x.timestamp) / 1e6 > this.lastT[kind]).sort(byTime);
+      if (out.length) this.lastT[kind] = num(out.at(-1).timestamp) / 1e6;
+      return out;
+    };
 
-    for (const lm of [...(face.landmarks ?? [])].sort(byTime)) {
+    for (const lm of fresh('landmarks', face.landmarks)) {
       const t = num(lm.timestamp) / 1e6;
       const pts = lm.value ?? [];
-      if (t <= this.lastSampleT || pts.length <= CHIN) continue;
+      if (pts.length <= CHIN) continue;
       sawFace = true;
-      newest = Math.max(newest, t);
       if (lm.reset) this.nod.reset(); // Presage lost and re-acquired the face
       const faceH = Math.abs(pts[CHIN].y - pts[FOREHEAD].y);
       if (this.nod.update(pts[NOSE_TIP].y, faceH, t)) events.push([t, 'nod']);
       this.debug.nodDelta = Math.round(this.nod.delta * 1000) / 1000;
     }
 
-    for (const b of [...(face.blinking ?? [])].sort(byTime)) {
+    for (const b of fresh('blinking', face.blinking)) {
       const t = num(b.timestamp) / 1e6;
-      if (t <= this.lastSampleT) continue;
-      newest = Math.max(newest, t);
+      this.debug.blinkSamples += 1;
+      if (b.detected) this.debug.eyesClosedSamples += 1;
       // A blink is the rising edge of Presage's binary "eyes closed" detection.
       if (b.detected && !this.blinkOn && t - this.lastBlinkT >= GESTURES.BLINK_MIN_GAP_S) {
         events.push([t, 'blink']);
         this.lastBlinkT = t;
+        this.debug.blinks += 1;
       }
       this.blinkOn = !!b.detected;
       this.debug.blink = b.detected ? 1 : 0;
     }
 
-    for (const ex of [...(face.expression ?? [])].sort(byTime)) {
+    for (const ex of fresh('expression', face.expression)) {
       const t = num(ex.timestamp) / 1e6;
-      if (t <= this.lastSampleT) continue;
-      newest = Math.max(newest, t);
       const happy = (ex.scores ?? []).find((s) => s.type === HAPPY || s.type === 'HAPPY');
       const score = happy ? num(happy.confidence) / 100 : 0;
       this.debug.smile = Math.round(score * 100) / 100;
@@ -138,7 +143,6 @@ export class FaceSignalAdapter {
       if (this.happySamples === GESTURES.SMILE_SAMPLES) events.push([t, 'smile']);
     }
 
-    this.lastSampleT = newest;
     events.sort((a, b) => a[0] - b[0]);
     return { gestures: events.map((e) => e[1]), sawFace };
   }

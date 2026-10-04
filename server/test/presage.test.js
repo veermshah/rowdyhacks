@@ -42,6 +42,19 @@ test('adapter: blink = rising edge of Presage blink detection, across packets', 
   assert.deepEqual(a.ingest(blinking([[1.6, true]])).gestures, []);
 });
 
+test('adapter: blinks computed behind the landmarks still count (per-metric dedupe)', () => {
+  const a = new FaceSignalAdapter();
+  // Presage delivers landmarks up to t=5.0 first...
+  a.ingest(landmarks([[4.8, 200], [4.9, 200], [5.0, 200]]));
+  // ...and the blink results for t=4.0-4.6 arrive in a later packet.
+  const r = a.ingest(blinking([[4.0, false], [4.1, true], [4.2, false], [4.4, true], [4.6, false]]));
+  assert.deepEqual(r.gestures, ['blink', 'blink']);
+  assert.equal(a.debug.blinks, 2);
+  assert.equal(a.debug.eyesClosedSamples, 2);
+  // Late expressions are not dropped either.
+  assert.deepEqual(a.ingest(expression([[4.5, 90], [4.7, 95]])).gestures, ['smile']);
+});
+
 test('adapter: smile = HAPPY confidence >= 60% on consecutive samples', () => {
   const a = new FaceSignalAdapter();
   assert.deepEqual(a.ingest(expression([[1, 30], [1.1, 70]])).gestures, []);
