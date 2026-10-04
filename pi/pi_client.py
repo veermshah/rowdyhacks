@@ -51,6 +51,7 @@ def _speak(text):
             config.TTS_COMMAND,
         )
         return
+    log.info("Received speak command; playing keyword through %s", config.TTS_COMMAND)
     threading.Thread(
         target=subprocess.run,
         args=([executable, text],),
@@ -74,6 +75,7 @@ def disconnect():
 def on_cmd(data):
     """Server -> Pi actuator command. Translated to one serial command line."""
     cmd_type = (data or {}).get("type")
+    log.info("Received server command: %s", cmd_type or "unknown")
     if cmd_type == "lcd":
         line1 = (data.get("line1") or "")[:16]
         line2 = (data.get("line2") or "")[:16]
