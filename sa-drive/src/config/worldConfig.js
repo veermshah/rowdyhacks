@@ -5,7 +5,7 @@ export const LON0 = -98.4870;
 // Bounding box
 export const BOUNDS = {
   south: 29.414,
-  west: -98.495,
+  west: -98.505,
   north: 29.430,
   east: -98.478,
 };

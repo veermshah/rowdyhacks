@@ -3,7 +3,7 @@
 ## Map Data
 - OpenStreetMap contributors
 - Â© OpenStreetMap contributors, licensed under ODbL
-- Data fetched via Overpass API
+- Data fetched via Overpass API; UTSA campus extension fetched from the OpenStreetMap map API on October 4, 2026.
 
 ## Technology
 - Three.js â€” 3D rendering
@@ -28,3 +28,5 @@ All geometry is procedural; no reference photographs are bundled.
 
 ## Branding
 - RH logo stamp supplied by the project owner; used unchanged as a shared WebP texture on player-car badges and selected route-side sign panels.
+
+- UTSA campus: OSM footprints for San Pedro I, San Pedro II, Buena Vista, Frio Street, and Durango buildings. Procedural facades and signs, with district layout guided by the user-supplied campus map.

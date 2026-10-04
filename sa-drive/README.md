@@ -35,8 +35,8 @@ approach within the road boundary lets police catch cars stopped on the shoulder
 
 Navigation uses the exported OSM road network, built once on map load with
 shared intersection vertices and building-clearance checks. The supplied export
-has no one-way metadata, so its roads are bidirectional; the graph also supports
-oneway metadata when present. Roads retain their existing widths and centerlines.
+contains bidirectional base roads and one-way metadata in the campus extension;
+the graph honors one-way metadata when present. Roads retain their existing widths and centerlines.
 
 The beveled arrow follows the road route with 20-55 m speed-sensitive lookahead.
 Distance is remaining driving distance. The mint-green world ribbon (16% of road width) and minimap read
@@ -121,3 +121,15 @@ webcam check. Difficulty is a tuning target, not a measured player catch rate.
 See [PERFORMANCE.md](PERFORMANCE.md) for profiling, confirmed bottlenecks, measured
 results and verification limits. Run `node scripts/validate-performance.mjs`
 alongside the existing validation scripts. Gameplay and artwork are preserved.
+
+### UTSA campus start
+
+The initial spawn is on Dolorosa Street beside SP2 (San Pedro II), heading toward
+The Alamo. The imported western district includes SP1 and the Downtown Campus
+buildings. San Pedro Creek uses the same recessed water, stone promenades,
+lamps, planting and bridge renderer as the River Walk. Campus facades are
+stylized procedural models on OpenStreetMap footprints, not exact replicas.
+
+The campus map import can be reproduced with
+`python scripts/import-campus.py path/to/campus.osm` using OSM map API XML for
+`bbox=-98.505,29.420,-98.494,29.426`. Run it after regenerating the base downtown map.

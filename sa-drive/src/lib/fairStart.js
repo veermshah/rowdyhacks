@@ -3,7 +3,7 @@ import { POLICE_START_DISTANCE } from '../game/startConfig.js';
 import { POLICE_CONFIG } from '../config/policeConfig.js';
 // Pick a clear road start facing its destination route, with a real 150-220m
 // pursuit path behind it. A distance check rejects loops that create shortcuts.
-export function findFairStart(graph, anchor, destination) {
+export function findFairStart(graph, anchor, destination, minimumDistance=65) {
   const candidates=[anchor,...graph.edges.map(e=>{
     const a=graph.nodes[e.start],b=graph.nodes[e.end];
     return {x:(a.x+b.x)/2,z:(a.z+b.z)/2};
@@ -12,8 +12,8 @@ export function findFairStart(graph, anchor, destination) {
   for(const candidate of candidates){
     const key=`${Math.round(candidate.x/12)},${Math.round(candidate.z/12)}`;
     if(visited.has(key))continue;visited.add(key);
-    const snap=nearestEdge(graph,candidate);if(!snap||graph.sizes[snap.component]<30)continue;
-    const route=calculateRoute(graph,snap,destination);if(!route||route.length<65)continue;
+    const snap=nearestEdge(graph,candidate);if(!snap||snap.component!==graph.mainComponent)continue;
+    const route=calculateRoute(graph,snap,destination);if(!route||route.length<minimumDistance)continue;
     const next=routeProgress(route.points,snap,10).point;
     const spawn={x:snap.x,z:snap.z,yaw:Math.atan2(next.x-snap.x,next.z-snap.z)};
     const ahead=routeProgress(route.points,spawn,30).point;

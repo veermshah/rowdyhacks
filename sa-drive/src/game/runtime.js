@@ -27,7 +27,7 @@ export function restartGame(){
   game.graceRemaining=PURSUIT_GRACE_SECONDS;
   if(!spawn)throw new Error('No valid police road spawn behind player');
   game.police={...spawn,v:0,route:null,index:1,lastPlan:-Infinity,replanDelay:PC.routeUpdateMin,plans:0,turnWait:0,blocked:new Set(),stalled:0,active:true};
-  guidance.selected=-1;guidance.lastPlan=-Infinity;guidance.arrived=false;
+  guidance.route=null;guidance.selected=-1;guidance.lastPlan=-Infinity;guidance.arrived=false;
   updateGuidance(true);
 }
 export function updateGuidance(force=false){
@@ -37,7 +37,11 @@ export function updateGuidance(force=false){
   const wrongRoad=progress && progress.distance>Math.max(8,(guidance.route.points[progress.index]?.width||12)/2+3);
   const needsPlan=force||guidance.selected!==navigation.selected||!guidance.route||progress?.distance>24||wrongRoad;
   if(needsPlan&&(force||guidance.selected!==navigation.selected||elapsed-guidance.lastPlan>=.75)){
-    guidance.route=calculateRoute(game.graph,car,destinations[navigation.selected]);
+    // Preserve the connected network when overlapping road segments meet.
+    const previousEdge=game.graph.edges[guidance.route?.edgeIds?.[0]];
+    const component=previousEdge?game.graph.nodes[previousEdge.start].component:null;
+    const snap=component===null?null:nearestEdge(game.graph,car,component);
+    guidance.route=calculateRoute(game.graph,car,destinations[navigation.selected],new Set(),null,snap&&snap.distance<16?component:null);
     guidance.version++;guidance.selected=navigation.selected;guidance.lastPlan=elapsed;
     progress=routeProgress(guidance.route?.points,car,20+Math.min(Math.abs(car.v)/25,1)*35);
   }
@@ -134,7 +138,7 @@ export function skipToDestination(){
     game.police={...police,v:0,route:null,index:1,lastPlan:-Infinity,replanDelay:PC.routeUpdateMin,plans:0,turnWait:0,blocked:new Set(),stalled:0,active:true};
   }
   // Force route recalculation for the new destination
-  guidance.selected=-1;guidance.lastPlan=-Infinity;guidance.arrived=false;
+  guidance.route=null;guidance.selected=-1;guidance.lastPlan=-Infinity;guidance.arrived=false;
   updateGuidance(true);
   return next;
 }
@@ -147,5 +151,10 @@ export function tickGame(dt){
   elapsed+=Math.min(dt,.05);
   if(!game.ready)return;
   updateGuidance();
+  if(game.started&&!game.caught&&!game.paused&&guidance.arrived){
+    navigation.selected=(navigation.selected+1)%destinations.length;
+    // Replan in place without restarting the run or moving either car.
+    updateGuidance(true);
+  }
   if(game.started&&!game.caught&&!game.paused)stepPursuit(Math.min(dt,.05));
 }

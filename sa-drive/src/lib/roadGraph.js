@@ -29,7 +29,9 @@ export function buildRoadGraph(roads,buildingGrid) {
         const from={x:a.x+(b.x-a.x)*j/n,z:a.z+(b.z-a.z)*j/n};
         const to={x:a.x+(b.x-a.x)*(j+1)/n,z:a.z+(b.z-a.z)*(j+1)/n};
         if(distance(from,to)<.01||!clearSegment(buildingGrid,from,to))continue;
-        const u=node(from,layer),v=node(to,layer),length=distance(from,to);
+        // Bridge ends meet surface streets; interior crossings retain their layer.
+        const u=node(from,road.bridge&&i===1&&j===0?0:layer);
+        const v=node(to,road.bridge&&i===road.points.length-1&&j===n-1?0:layer),length=distance(from,to);
         const oneWay=road.oneway??road.oneWay;
         const forward=oneWay!=='-1',backward=!(oneWay===true||oneWay==='yes'||oneWay==='1');
         const edge={id:edges.length,start:u,end:v,distance:length,width:road.width,type:road.type,forward,backward};edges.push(edge);
@@ -77,8 +79,8 @@ export function aStar(graph,start,goal,blocked=new Set()) {
   }
   return null;
 }
-export function calculateRoute(graph,start,target,blocked=new Set(),targetFilter=null) {
-  const s=nearestEdge(graph,start);if(!s)return null;
+export function calculateRoute(graph,start,target,blocked=new Set(),targetFilter=null,sourceComponent=null) {
+  const s=nearestEdge(graph,start,sourceComponent);if(!s)return null;
   const t=nearestEdge(graph,target,s.component,targetFilter);if(!t)return null;
   let best=null;
   const accept=(points,length,edgeIds)=>{if(!best||length<best.length){const filtered=points.filter((p,i)=>!i||distance(p,points[i-1])>.01);best={points:filtered,length,edgeIds,endpoint:{x:t.x,z:t.z},targetOffset:t.distance};}};

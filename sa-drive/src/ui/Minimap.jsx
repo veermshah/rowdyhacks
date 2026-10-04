@@ -1,3 +1,4 @@
+import { CAMPUS_BUILDINGS } from '../config/campus.js';
 import { ROUTE_COLOR } from '../config/routeStyle.js';
 import { guidance,game } from '../game/runtime.js';
 import { useEffect, useRef, useState } from 'react';
@@ -7,7 +8,7 @@ import { car } from '../car/state.js';
 const SIZE = 160;
 const SCALE = 0.12; // pixels per meter
 
-export default function Minimap({ roads }) {
+export default function Minimap({ roads, buildings = [], river }) {
   const [expanded,setExpanded]=useState(false);
   const [selected,setSelected]=useState(navigation.selected);
   const triggerRef=useRef(),closeRef=useRef();
@@ -86,6 +87,17 @@ export default function Minimap({ roads }) {
         );
       }
 
+      // Campus footprints and the creek keep the spawn district recognizable.
+      ctx.strokeStyle='#369b9a';ctx.lineWidth=expanded?3:2;
+      for(const path of river?.paths||[]){ctx.beginPath();path.forEach((p,i)=>{const x=SIZE/2+(p.x-center.x)*SCALE,y=SIZE/2+(p.z-center.z)*SCALE;if(i)ctx.lineTo(x,y);else ctx.moveTo(x,y);});ctx.stroke();}
+      for(const b of buildings){
+        const config=CAMPUS_BUILDINGS[b.id];if(!config)continue;
+        ctx.fillStyle='#ed722f';ctx.beginPath();b.points.forEach((p,i)=>{const x=SIZE/2+(p.x-center.x)*SCALE,y=SIZE/2+(p.z-center.z)*SCALE;if(i)ctx.lineTo(x,y);else ctx.moveTo(x,y);});ctx.closePath();ctx.fill();
+        if(b.id===80475799||b.id===126457328)continue;
+        const p=b.points[0],x=SIZE/2+(p.x-center.x)*SCALE,y=SIZE/2+(p.z-center.z)*SCALE;
+        if(x<8||x>SIZE-30||y<16||y>SIZE-20||(!expanded&&config.name==='UTSA'))continue;
+        ctx.font='bold 10px system-ui';ctx.fillStyle='#fff';ctx.fillText(config.name==='UTSA'?'DOWNTOWN CAMPUS':config.name,x-8,y+(config.name==='SP1'?17:-7));
+      }
       const points=guidance.route?.points||[];
       if(points.length){ctx.strokeStyle=ROUTE_COLOR;ctx.lineWidth=2;ctx.lineJoin='round';ctx.beginPath();points.forEach((p,i)=>{const x=SIZE/2+(p.x-center.x)*SCALE,y=SIZE/2+(p.z-center.z)*SCALE;if(i)ctx.lineTo(x,y);else ctx.moveTo(x,y);});ctx.stroke();}
       if(game.police){const x=SIZE/2+(game.police.x-center.x)*SCALE,y=SIZE/2+(game.police.z-center.z)*SCALE;ctx.fillStyle='#ff4e75';ctx.fillRect(x-4,y-3,4,6);ctx.fillStyle='#58aaff';ctx.fillRect(x,y-3,4,6);}
@@ -129,7 +141,7 @@ export default function Minimap({ roads }) {
 
     draw();
     return () => cancelAnimationFrame(raf);
-  }, [size,scale,expanded,selected]);
+  }, [size,scale,expanded,selected,buildings,river]);
 
   function pickOnMap(e){
     if(!expanded){setExpanded(true);return;}

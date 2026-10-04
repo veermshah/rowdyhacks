@@ -59,7 +59,7 @@ export function buildRiverScene(network,roads,buildings,buildingGrid,roadGrid){
   }
   let propCount=0;const propCells=new Set();
   for(const {a,b,len} of network.segments){
-    if(Math.abs(a.x)>650||Math.abs(a.z)>750)continue;
+    if(a.x < -1900 || a.x > 650||Math.abs(a.z)>750)continue;
     const dx=(b.x-a.x)/len,dz=(b.z-a.z)/len;
     for(let distance=12;distance<len;distance+=30){
       const center={x:a.x+dx*distance,z:a.z+dz*distance},key=`${Math.round(center.x/24)},${Math.round(center.z/24)}`;
@@ -91,9 +91,9 @@ export function buildRiverScene(network,roads,buildings,buildingGrid,roadGrid){
         beam(left,right,.025,.025,'#3e4e47');
         for(let j=0;j<7;j++)add(new THREE.SphereGeometry(.085,6,4).translate(left.x+dx*j*1.33,.7-Math.sin(j/6*Math.PI)*.35,left.z+dz*j*1.33),'#ffdfa0',lights);
       }
-      if(++propCount>=100)break;
+      if(++propCount>=150)break;
     }
-    if(propCount>=100)break;
+    if(propCount>=150)break;
   }
   return {water:ribbonGeometry(water),walkways:ribbonGeometry(walkways),mask:ribbonGeometry(mask),solid:merge(solid),lights:merge(lights),foliage:merge(foliage),bridges,propCount};
 }

@@ -4,6 +4,8 @@ import Car from './car/Car.jsx';
 import { car, setRoadGrid, setBuildingGrid } from './car/state.js';
 import CameraRig from './car/CameraRig.jsx';
 import Ground from './world/Ground.jsx';
+import Campus from './world/Campus.jsx';
+import { SP2_POINT, CAMPUS_BUILDINGS } from './config/campus.js';
 import RouteBranding from './world/Branding.jsx';
 import Roads from './world/Roads.jsx';
 import Buildings from './world/Buildings.jsx';
@@ -16,10 +18,10 @@ import Calibrate from './ui/Calibrate.jsx';
 import CamPreview from './ui/CamPreview.jsx';
 import Minimap from './ui/Minimap.jsx';
 import { initKeyboard, cleanupKeyboard } from './input/keyboard.js';
-import { FOG_COLOR, toLocal } from './config/worldConfig.js';
+import { FOG_COLOR } from './config/worldConfig.js';
 import { roadWidth, isDrivable } from './config/roadConfig.js';
 import { buildBuildingGrid, safeRoadSpawn } from './lib/collision.js';
-import { landmarkObstacles, LANDMARK_OSM_REPLACEMENTS, LANDMARKS } from './config/landmarkConfig.js';
+import { landmarkObstacles, LANDMARK_OSM_REPLACEMENTS } from './config/landmarkConfig.js';
 import Navigation from './ui/Navigation.jsx';
 import StreetProps from './world/StreetProps.jsx';
 import { buildRoadGraph } from './lib/roadGraph.js';
@@ -71,9 +73,8 @@ export default function App() {
         gridRef.current = grid;
         setRoadGrid(grid);
 
-        // Spawn car near the Alamo
-        const alamoLocal = toLocal(LANDMARKS.alamo.lat, LANDMARKS.alamo.lon);
-        const spawn = safeRoadSpawn(data.roads, obstacles, alamoLocal);
+        // Start beside SP2 on the connected Dolorosa Street network.
+        const spawn = safeRoadSpawn(data.roads, obstacles, SP2_POINT);
         if (!spawn) throw new Error('No clear road spawn found');
         car.safePosition = spawn;
         car.x = spawn.x;
@@ -96,7 +97,7 @@ export default function App() {
 
   // Compute tree bounds from map data
   const treeBounds = mapData ? {
-    xMin: -900, xMax: 900,
+    xMin: -1900, xMax: 900,
     zMin: -900, zMax: 900,
   } : null;
 
@@ -135,7 +136,8 @@ export default function App() {
         {mapData && (
           <>
             <Roads roads={mapData.roads} river={mapData.river} />
-            <Buildings buildings={mapData.buildings} />
+            <Buildings buildings={mapData.buildings.filter(b=>!CAMPUS_BUILDINGS[b.id])} />
+            <Campus buildings={mapData.buildings} />
             <RouteBranding buildings={mapData.buildings} />
             <River network={mapData.river} roads={mapData.roads} buildings={mapData.buildings} buildingGrid={grids?.building} roadGrid={grids?.road} />
             <Trees roadGrid={grids?.road} buildingGrid={grids?.building} bounds={treeBounds} />
@@ -162,7 +164,7 @@ export default function App() {
 
       <Calibrate videoRef={videoRef} onReady={handleReady} />
       {started && <CamPreview videoRef={videoRef} />}
-      {mapData && <Minimap roads={mapData.roads} />}
+      {mapData && <Minimap roads={mapData.roads} buildings={mapData.buildings} river={mapData.river} />}
       {mapData && <Navigation />}
       <Hud />
       <DrivingAudio />

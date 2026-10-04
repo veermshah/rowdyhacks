@@ -1,3 +1,4 @@
+import { SP2_POINT } from '../src/config/campus.js';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { isOpenHand,createGestureState,updateGestureState } from '../src/input/gestures.js';
@@ -52,11 +53,11 @@ assert(vehiclesTouch({x:0,z:0,yaw:0},{x:0,z:4,yaw:0}));assert(!vehiclesTouch({x:
 // A crashed/off-road player beside a wall remains catchable by a safe final approach.
 const shoulderWall=buildBuildingGrid([{points:[{x:12,z:10},{x:25,z:10},{x:25,z:40},{x:12,z:40}]}]);
 const straightGraph=buildRoadGraph([road([{x:0,z:-200},{x:0,z:200}])],shoulderWall);
-initializeGame(straightGraph,shoulderWall,{x:0,z:0,yaw:0});game.started=true;Object.assign(car,{x:6.5,z:20,v:0,offroad:true});
+navigation.selected=1;initializeGame(straightGraph,shoulderWall,{x:0,z:0,yaw:0});game.started=true;Object.assign(car,{x:6.5,z:20,v:0,offroad:true});
 for(let i=0;i<2400&&!game.caught;i++){tickGame(1/60);assert(!overlapsBuilding(shoulderWall,game.police.x,game.police.z));}
 assert(game.caught,'crash on shoulder is caught without crossing wall');
 const data=JSON.parse(readFileSync(new URL('../public/data/downtown.json',import.meta.url)));const roads=data.roads.map(r=>({...r,width:roadWidth(r),drivable:isDrivable(r)}));const river=buildRiverNetwork(data.water),roadGrid=buildRoadGrid(roads);const obstacles=buildBuildingGrid([...data.buildings.filter(b=>!LANDMARK_OSM_REPLACEMENTS.has(b.id)),...landmarkObstacles(),...riverObstacles(river,roadGrid,queryNearestRoad)]);
-console.time('Build actual OSM graph');const graph=buildRoadGraph(roads,obstacles);console.timeEnd('Build actual OSM graph');initializeGame(graph,obstacles,safeRoadSpawn(roads,obstacles,destinations[0]));game.started=true;
+navigation.selected=0;console.time('Build actual OSM graph');const graph=buildRoadGraph(roads,obstacles);console.timeEnd('Build actual OSM graph');initializeGame(graph,obstacles,safeRoadSpawn(roads,obstacles,destinations[0]));game.started=true;
 let cop=game.police;assert(cop.distance>=170&&cop.distance<=220);assert((cop.x-car.x)*Math.sin(car.yaw)+(cop.z-car.z)*Math.cos(car.yaw)<0,'police behind player');assert(nearestEdge(graph,cop).distance<.1);assert(!overlapsBuilding(obstacles,cop.x,cop.z));
 for(let i=0;i<1800&&!game.caught;i++){tickGame(1/60);assert(!overlapsBuilding(obstacles,cop.x,cop.z));}assert(game.caught,'stopping is caught');const caughtAt={x:cop.x,z:cop.z};tickGame(1);assert.equal(cop.x,caughtAt.x);assert.equal(cop.z,caughtAt.z);
 restartGame();assert(!game.caught);assert.equal(car.v,0);assert.equal(game.distance,0);assert(game.police.distance>=170&&game.police.distance<=220);
@@ -95,7 +96,49 @@ for(const [geometry,height] of [[scene.water,WATER_Y],[scene.walkways,WALKWAY_Y]
   const vertices=geometry.attributes.position;assert(vertices.count>0);
   for(let i=0;i<vertices.count;i++)assert(Math.abs(vertices.getY(i)-height)<.001);
 }
-assert(scene.bridges.length>0);assert(scene.propCount<=100);
+assert(scene.bridges.length>0);assert(scene.propCount<=150);
 for(const value of Object.values(scene))if(value?.isBufferGeometry){assert(value.attributes.position.array.every(Number.isFinite));value.dispose();}
 console.log('PASS: 16% route ribbon, all destination starts forward with police 170-220m behind, four-second grace, recessed river geometry and bridges');
 console.log('PASS: open-hand debounce/rotation/loss, signed reverse/steering/cap, crash escape, route-only bearings/anticipation/distance, one-way A*, clear OSM routes, police road spawn/pursuit/catch, restart, rerouting');
+
+// Every road-access arrival advances once, preserves the run, and waits for challenges.
+navigation.selected=0;
+initializeGame(graph,obstacles,safeRoadSpawn(roads,obstacles,SP2_POINT));
+assert(Math.hypot(car.x-SP2_POINT.x,car.z-SP2_POINT.z)<100,`spawn stays beside SP2: ${JSON.stringify(car.safePosition)}, ${JSON.stringify(game.anchor)}`);
+assert(guidance.remaining>500,'SP2 has a driving route to the Alamo');
+for(let selected=0;selected<destinations.length;selected++){
+  game.started=true;
+  game.paused=true;
+  const endpoint=guidance.route.endpoint;
+  Object.assign(car,{x:endpoint.x,z:endpoint.z,v:0});
+  const epoch=game.epoch;
+  const police=game.police;
+  tickGame(0);
+  assert(guidance.arrived,'endpoint counts as arrival');
+  assert.equal(navigation.selected,selected,'open challenge holds destination');
+  game.paused=false;
+  tickGame(0);
+  assert.equal(navigation.selected,(selected+1)%destinations.length,'arrival advances including wraparound');
+  assert.equal(guidance.selected,navigation.selected);
+  assert(guidance.route.targetOffset<100,'next route reaches the landmark neighborhood');
+  for(let i=1;i<guidance.route.points.length;i++)assert(clearSegment(obstacles,guidance.route.points[i-1],guidance.route.points[i]),'campus progression stays on clear roads');
+  assert(guidance.route&&guidance.remaining>12,`next destination has an active route: ${selected}, ${guidance.remaining}, ${!!guidance.route}, length=${guidance.route?.length}, component=${nearestEdge(graph,car)?.component}, offset=${guidance.route?.targetOffset}`);
+  assert.equal(game.epoch,epoch,'arrival preserves the run');
+  assert.equal(game.police,police,'arrival preserves police');
+  assert.equal(car.x,endpoint.x);
+  assert.equal(car.z,endpoint.z);
+  tickGame(0);
+  assert.equal(navigation.selected,(selected+1)%destinations.length,'stationary car does not advance twice');
+}
+console.log('Automatic destination progression passed');
+
+// Bridges connect to their approach roads without joining an interior overpass.
+const bridgeGraph=buildRoadGraph([
+  road([{x:0,z:0},{x:0,z:40}]),
+  {...road([{x:0,z:40},{x:0,z:60}]),bridge:true,layer:1},
+  road([{x:0,z:60},{x:0,z:100}]),
+  road([{x:-30,z:50},{x:0,z:50},{x:30,z:50}]),
+],new Map());
+assert(calculateRoute(bridgeGraph,{x:0,z:10},{x:0,z:90})?.length===80,'bridge joins both approaches');
+assert.notEqual(nearestEdge(bridgeGraph,{x:0,z:10}).component,nearestEdge(bridgeGraph,{x:20,z:50}).component,'overpass interior remains separate');
+console.log('PASS: campus road access, landmark reachability, and bridge endpoint connections');

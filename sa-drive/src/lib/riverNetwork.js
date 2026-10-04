@@ -10,7 +10,7 @@ export function buildRiverNetwork(water){
     if(!['river','canal'].includes(feature.type))continue;
     let run=[];
     const flush=()=>{if(run.length>1)paths.push(run);run=[];};
-    for(const p of feature.points){if(Math.abs(p.x)>1100||Math.abs(p.z)>1100){flush();continue;}run.push(p);}flush();
+    for(const p of feature.points){if(p.x < -2100 || p.x > 1100||Math.abs(p.z)>1100){flush();continue;}run.push(p);}flush();
   }
   for(const points of paths)for(let i=1;i<points.length;i++){
     const a=points[i-1],b=points[i],len=Math.hypot(b.x-a.x,b.z-a.z);if(len<.01)continue;

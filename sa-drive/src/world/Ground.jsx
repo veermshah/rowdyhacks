@@ -10,7 +10,7 @@ function grassShader(shader){
 export default function Ground() {
   return (
     <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
-      <planeGeometry args={[2000, 2000]} />
+      <planeGeometry args={[5000, 5000]} />
       <meshLambertMaterial color="#354f32" onBeforeCompile={grassShader} stencilWrite stencilRef={1} stencilFunc={THREE.NotEqualStencilFunc} stencilFail={THREE.KeepStencilOp} stencilZFail={THREE.KeepStencilOp} stencilZPass={THREE.KeepStencilOp} />
     </mesh>
   );
