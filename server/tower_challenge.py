@@ -61,6 +61,7 @@ def _validate_lcd_text():
     fills = {
         "code": {"code": "9" * OTP_LENGTH},
         "entering": {"secs": OTP_TTL_S, "entry": entry_worst},
+        "entering_last": {"secs": OTP_TTL_S, "entry": entry_worst},
         "wrong_code": {"left": MAX_OTP_ATTEMPTS},
     }
     for state, lines in LCD_STATUS.items():
@@ -375,7 +376,8 @@ class TowerChallenge:
             return self._lcd_pair("code", code=self.otp)
         if self.status == "entering":
             secs = max(0, math.ceil(self.otp_expires_at - now))
-            return self._lcd_pair("entering", secs=secs, entry=self._entry_text())
+            state = "entering_last" if self.cursor == OTP_LENGTH - 1 else "entering"
+            return self._lcd_pair(state, secs=secs, entry=self._entry_text())
         return self._lcd_pair(self.status if self.active else "idle")
 
     def _reset_display(self, now):

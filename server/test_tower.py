@@ -270,6 +270,16 @@ def test_correct_code_auto_submits_without_a_button():
     assert ch.handle_input("joystick", "right", t) == ["done"] and ch.verified
 
 
+def test_lcd_hints_right_to_submit_on_the_last_digit():
+    ch = new_challenge()
+    t = start_entering(ch, 0.0)
+    assert ch._current_lcd_text(t)[0].startswith("ENTER CODE")
+    for _ in range(OTP_LENGTH - 1):
+        ch.handle_input("joystick", "right", t)
+    line1, line2 = ch._current_lcd_text(t)
+    assert line1.startswith("RIGHT=SUBMIT") and len(line1) <= 16 and "[" in line2
+
+
 def test_the_button_no_longer_submits():
     ch = new_challenge()
     t = start_entering(ch, 0.0)

@@ -84,6 +84,8 @@ LCD_STATUS = {
     "verify": ("VERIFYING...", "STAY ON LINE"),
     "code": ("CODE:", "{code}"),
     "entering": ("ENTER CODE {secs:>2}s", "{entry}"),
+    # Same, once the cursor is on the last digit: right now submits.
+    "entering_last": ("RIGHT=SUBMIT {secs:>2}s", "{entry}"),
     "wrong_code": ("WRONG CODE", "{left} LEFT"),
     "expired": ("CODE EXPIRED", "ASK FOR NEW"),
     "burned": ("CODE BURNED", "CALL AGAIN"),

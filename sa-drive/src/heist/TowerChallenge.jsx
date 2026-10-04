@@ -23,7 +23,7 @@ const STEP_TEXT = {
   TOWER_RINGING: "Phone the bank's fraud line and ask for Margaret. Pose as the account holder - or know the staff override phrase.",
   TOWER_VERIFY: "Margaret is on the line. Talk her into trusting you: once she's satisfied she'll send the one-time code to the vault.",
   TOWER_CODE: 'A code is on the vault screen right now - read it off before it disappears!',
-  TOWER_ENTERING: 'Key it in on the vault joystick: up/down = digit, left/right = position. Push right on the last digit to enter it.',
+  TOWER_ENTERING: 'Key it in on the vault joystick: up/down = digit, left/right = next digit. Push right once more on the 4th digit to submit - the screen will say RIGHT=SUBMIT.',
   TOWER_DONE: 'Code accepted. The vault is open.',
   TOWER_ALARM: 'Margaret raised the alarm. Security is on the way.',
 };
