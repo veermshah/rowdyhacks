@@ -5,10 +5,10 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-User=pi
-WorkingDirectory=/home/pi/rowdyhacks/pi
-EnvironmentFile=/home/pi/rowdyhacks/pi/.env
-ExecStart=/usr/bin/python3 /home/pi/rowdyhacks/pi/pi_client.py
+User=dhivyesh123
+WorkingDirectory=/home/dhivyesh123/rowdyhacks/pi
+EnvironmentFile=/home/dhivyesh123/rowdyhacks/pi/.env
+ExecStart=/home/dhivyesh123/rowdyhacks/pi/.venv/bin/python /home/dhivyesh123/rowdyhacks/pi/pi_client.py
 Restart=always
 RestartSec=3
 
