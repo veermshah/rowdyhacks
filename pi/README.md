@@ -100,6 +100,25 @@ systemctl status alamo-pi
 journalctl -u alamo-pi -f
 ```
 
+While testing Alamo or Tower, keep the journal open and watch for:
+
+```text
+Received server command: lcd
+LCD request: line1='CODE:' line2='****'
+Sending Arduino command: LCD:CODE:|****
+```
+
+For the Alamo repeat-keyword button, the Pi logs:
+
+```text
+Received server command: speak
+Repeat/audio request received; speaking keyword (5 characters)
+```
+
+The keyword and Tower OTP are intentionally masked in logs. These messages
+confirm that the command reached the Pi and was forwarded to the Arduino
+without putting the secret in the journal.
+
 The service restarts automatically (`Restart=always`) if it crashes, and
 `pi_client.py` itself reconnects on its own if the Arduino is unplugged or
 the server is unreachable - no manual restart needed in either case.
