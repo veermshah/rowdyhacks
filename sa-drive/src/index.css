@@ -37,3 +37,10 @@ canvas {
 .nav-dest-label{position:fixed;top:222px;right:8px;z-index:21;background:#101e30cc;border:1px solid #6586a34d;border-radius:8px;padding:8px 14px;color:#9cb5c9;font-size:11px;letter-spacing:.8px;backdrop-filter:blur(6px)}.nav-dest-label strong{color:#b0ffc8}
 .skip-btn{position:fixed;bottom:22px;right:22px;padding:8px 18px;background:#101e30cc;border:1px solid #3dcea866;border-radius:8px;color:#d0ffe0;font-size:12px;letter-spacing:1px;cursor:pointer;z-index:21;backdrop-filter:blur(6px);transition:background .2s,border-color .2s,box-shadow .2s}.skip-btn:hover{background:#1a3848dd;border-color:#5effa0aa;box-shadow:0 0 12px #3dcea844}.skip-btn:active{background:#254a3c}
 .audio-sliders{display:grid;gap:5px}.audio-sliders label{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:10px}
+
+/* Story narration caption (audio/StoryNarrator.jsx); above the challenge popups. */
+.story-caption{position:fixed;left:50%;bottom:96px;transform:translateX(-50%);z-index:130;width:min(640px,calc(100vw - 32px));padding:12px 16px;background:#071523ee;border:1px solid #63889777;border-left:3px solid #ffd84d;color:#e9faff;font-size:15px;line-height:1.45;pointer-events:none;animation:story-in .25s ease-out}
+.story-caption-who{display:block;margin-bottom:3px;font-size:10px;letter-spacing:2.4px;color:#ffd84d}
+@keyframes story-in{from{opacity:0;transform:translate(-50%,8px)}}
+@media (prefers-reduced-motion:reduce){.story-caption{animation:none}}
+.story-caption-badge{width:auto;padding:7px 14px;font-size:11px;letter-spacing:2.4px;color:#ffd84d}

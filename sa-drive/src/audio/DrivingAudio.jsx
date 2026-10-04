@@ -3,6 +3,8 @@ import { car } from '../car/state.js';
 import { input } from '../input/input.js';
 import { game, guidance } from '../game/runtime.js';
 import { drivingMix } from './drivingMix.js';
+import { isNarrating, setNarrationMuted } from './narrator.js';
+import { NARRATION_MUSIC_DUCK } from '../config/storyLines.js';
 
 function createAudio() {
   const Audio = window.AudioContext || window.webkitAudioContext;
@@ -76,7 +78,7 @@ export default function DrivingAudio(){
   const [musicVolume,setMusicVolume]=useState(.22);
   const level=useRef(.65);
   const musicLevel=useRef(.22);
-  useEffect(()=>{level.current=muted?0:volume;},[muted,volume]);
+  useEffect(()=>{level.current=muted?0:volume;setNarrationMuted(muted);},[muted,volume]);
   useEffect(()=>{musicLevel.current=muted?0:musicVolume;},[muted,musicVolume]);
   useEffect(()=>{
     let audio=null,failed=false,lastImpact=car.impactSerial||0,lastGear=input.reverse,lastArrived=guidance.arrived,epoch=game.epoch;
@@ -98,7 +100,8 @@ export default function DrivingAudio(){
         if(guidance.arrived&&!lastArrived)audio.pulse('cue',1046,.075,.45);
       }
       lastImpact=car.impactSerial||0;lastGear=input.reverse;lastArrived=guidance.arrived;
-      audio.update(mix,level.current,musicLevel.current);
+      // Dip the chase music while the story narrator is talking.
+      audio.update(mix,level.current,musicLevel.current*(isNarrating()?NARRATION_MUSIC_DUCK:1));
     },50);
     return()=>{clearInterval(timer);window.removeEventListener('pointerdown',unlock);window.removeEventListener('keydown',unlock);document.removeEventListener('visibilitychange',visibility);audio?.dispose();};
   },[]);
