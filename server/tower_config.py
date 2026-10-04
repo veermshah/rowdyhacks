@@ -1,12 +1,16 @@
 """Tower of the Americas challenge (Challenge 3 - "The Callback"): every tunable in one place.
 
 The crew phones the bank's fraud line (an ElevenLabs voice agent, "Margaret"),
-passes as account holder Jordan Mercer (or says the staff override phrase),
-and Margaret "sends a one-time code to the device on file". The SERVER makes
-that code and pushes it to the vault LCD for a few seconds; the crew reads it
-off the screen and keys it in on the joystick before it expires.
+passes as the account holder (or says the staff override phrase), and Margaret
+"sends a one-time code to the device on file". The SERVER makes that code and
+pushes it to the vault LCD for a few seconds; the crew reads it off the screen
+and keys it in on the joystick before it expires.
 
 The OTP is generated and checked only on the server. Margaret never sees it.
+The identity questions, the account facts and the override phrase live ONLY in
+the ElevenLabs agent (its prompt/dynamic variables): nothing about them is
+configured or hard-coded here. Margaret judges the caller herself; the server
+trusts her to call sendOtp only once she is satisfied.
 """
 
 # --- One-time code ------------------------------------------------------------
@@ -17,8 +21,6 @@ MAX_OTP_ATTEMPTS = 3         # wrong entries before the code is burned
 
 # --- Suspicion / alarm --------------------------------------------------------
 SUSPICION_ALARM_THRESHOLD = 100
-SUSPICION_WRONG_ANSWER = 20      # a wrong account answer
-SUSPICION_DENIED_OVERRIDE = 35   # a wrong staff override phrase
 SUSPICION_BURNED_OTP = 40        # an OTP burned by too many wrong entries
 MAX_SUSPICION_PER_CALL = 100     # cap on what a single raiseSuspicion call can add
 
@@ -27,19 +29,6 @@ TOWER_REWARD = 12_000
 TOWER_WANTED_ON_CLEAR = 2
 TOWER_WANTED_ON_ALARM = 2
 MAX_TRANSFER = 50_000            # approveTransfer is capped at this
-
-# --- Identity (what Margaret checks; she is told the answers by her prompt, ----
-# --- but the SERVER decides correct/wrong) ------------------------------------
-HOLDER_NAME = "Jordan Mercer"
-ACCOUNT_FACTS = {
-    "dog name": "Biscuit",
-    "hometown": "Dayton",
-    "last four": "7742",
-    "recent purchase": "concert tickets",
-    "employer": "Delmont Logistics",
-}
-VERIFY_ANSWERS_REQUIRED = 2      # distinct correct answers to prove identity
-SECRET_PHRASE = "silver armadillo"   # staff override phrase
 
 # --- Beeps (ms) ---------------------------------------------------------------
 BEEP_SHORT_MS = 80
@@ -82,7 +71,7 @@ SERVO_OPEN_ON_DONE = True
 BRIEFING = (
     "The Tower of the Americas holds bearer bonds behind a bank-grade vault "
     "lock. Phone the bank's fraud line and talk Margaret into believing "
-    "you're account holder Jordan Mercer - or find the staff override phrase. "
+    "you're the account holder - or find the staff override phrase. "
     "She'll send a one-time code to the device on file: the vault's screen. "
     "Read it off, then key it in on the joystick (up/down = digit, "
     "left/right = position, press = submit) before it expires."

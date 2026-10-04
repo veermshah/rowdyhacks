@@ -1030,26 +1030,6 @@ def _unauthorized():
     return jsonify(result="unauthorized"), 401
 
 
-@app.post("/api/tower/verify-answer")
-def tower_verify_answer():
-    """{"question": "dog name", "answer": "Biscuit"[, "carId"]} -> {"result": "correct"|"wrong"}"""
-    car_id, body = _tower_webhook_args()
-    if body is None:
-        return _unauthorized()
-    result = _tower_run(car_id, lambda t: t.agent_verify(_text(body, "question"), _text(body, "answer"), time.monotonic()))
-    return jsonify(result=result)
-
-
-@app.post("/api/tower/override")
-def tower_override():
-    """{"phrase": "..."} -> {"result": "OVERRIDE ACCEPTED"|"OVERRIDE DENIED"}"""
-    car_id, body = _tower_webhook_args()
-    if body is None:
-        return _unauthorized()
-    result = _tower_run(car_id, lambda t: t.agent_override(_text(body, "phrase"), time.monotonic()))
-    return jsonify(result=result)
-
-
 @app.post("/api/tower/send-otp")
 def tower_send_otp():
     """{} -> {"result": "code sent"}. The code goes to the vault LCD only and is
@@ -1058,6 +1038,18 @@ def tower_send_otp():
     if body is None:
         return _unauthorized()
     result = _tower_run(car_id, lambda t: t.agent_send_otp(time.monotonic()))
+    return jsonify(result=result)
+
+
+@app.route("/api/tower/check-otp", methods=["GET", "POST"])
+def tower_check_otp():
+    """{} -> {"result": "OTP VERIFIED" | "OTP FAILED - ..." | "OTP PENDING" |
+    "OTP NOT SENT"}. Read-only; tells Margaret how the joystick entry went
+    without ever revealing the code."""
+    car_id, body = _tower_webhook_args()
+    if body is None:
+        return _unauthorized()
+    result = _tower_run(car_id, lambda t: (t.agent_check_otp(time.monotonic()), []))
     return jsonify(result=result)
 
 

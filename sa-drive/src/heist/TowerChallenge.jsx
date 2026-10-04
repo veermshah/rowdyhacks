@@ -13,16 +13,15 @@ const MAX_OTP_ATTEMPTS = 3;
 const KEY_TO_MOVE = { ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right' };
 
 const STEPS = [
-  { id: 'call', label: 'Call the bank', stages: ['TOWER_RINGING'] },
-  { id: 'verify', label: 'Pass verification', stages: ['TOWER_VERIFY'] },
+  { id: 'call', label: 'Call the bank and pass verification', stages: ['TOWER_RINGING', 'TOWER_VERIFY'] },
   { id: 'code', label: 'Read the code off the vault', stages: ['TOWER_CODE'] },
   { id: 'enter', label: 'Key it in on the joystick', stages: ['TOWER_ENTERING'] },
 ];
 
 const STEP_TEXT = {
   TOWER_IDLE: 'Waiting for the vault to come online...',
-  TOWER_RINGING: "Phone the bank's fraud line and ask for Margaret. Pose as Jordan Mercer - or know the staff override phrase.",
-  TOWER_VERIFY: "Margaret is sizing you up. Answer her questions about the account holder (or give the override phrase), then ask her to send the one-time code.",
+  TOWER_RINGING: "Phone the bank's fraud line and ask for Margaret. Pose as the account holder - or know the staff override phrase.",
+  TOWER_VERIFY: "Margaret is on the line. Talk her into trusting you: once she's satisfied she'll send the one-time code to the vault.",
   TOWER_CODE: 'A code is on the vault screen right now - read it off before it disappears!',
   TOWER_ENTERING: 'Key it in on the vault joystick: up/down = digit, left/right = position, press the stick = submit.',
   TOWER_DONE: 'Code accepted. The vault is open.',
@@ -61,9 +60,6 @@ function CodeEntryView({ entry, cursor, active }) {
 
 function DevPanel({ connected }) {
   const [revealedCode, setRevealedCode] = useState(null);
-  const [question, setQuestion] = useState('dog name');
-  const [answer, setAnswer] = useState('');
-  const [phrase, setPhrase] = useState('');
   const [lastCall, setLastCall] = useState(null);
 
   const call = async (path, body) => {
@@ -88,16 +84,10 @@ function DevPanel({ connected }) {
       {revealedCode && <p className="rw-muted al-reveal-text">{revealedCode}</p>}
 
       <h3 className="tw-dev-sub">Margaret's webhook tools</h3>
-      <p className="rw-muted">Same POSTs ElevenLabs makes. See pi/README.md for the facts and phrase.</p>
-      <div className="tw-dev-fields">
-        <input value={question} onChange={(e) => setQuestion(e.target.value)} placeholder="question (e.g. dog name)" aria-label="Question" />
-        <input value={answer} onChange={(e) => setAnswer(e.target.value)} placeholder="answer" aria-label="Answer" />
-        <input value={phrase} onChange={(e) => setPhrase(e.target.value)} placeholder="override phrase" aria-label="Override phrase" />
-      </div>
+      <p className="rw-muted">Same POSTs ElevenLabs makes. Identity checks live in the agent, not here.</p>
       <div className="rw-dev-grid">
-        <button className="rw-dev-btn" onClick={() => call('verify-answer', { question, answer })}>verifyAnswer</button>
-        <button className="rw-dev-btn" onClick={() => call('override', { phrase })}>override</button>
         <button className="rw-dev-btn" onClick={() => call('send-otp')}>sendOtp</button>
+        <button className="rw-dev-btn" onClick={() => call('check-otp')}>checkOtp</button>
         <button className="rw-dev-btn" onClick={() => call('approve-transfer', { amount: 12000 })}>approveTransfer</button>
         <button className="rw-dev-btn" onClick={() => call('raise-suspicion', { amount: 30, reason: 'dev' })}>raiseSuspicion +30</button>
         <button className="rw-dev-btn fail" onClick={() => call('trigger-alarm', { reason: 'dev' })}>triggerAlarm</button>
@@ -250,7 +240,7 @@ export default function TowerChallenge() {
               >
                 <div className={suspicionPct >= 70 ? 'hot' : ''} style={{ width: `${suspicionPct}%` }} />
               </div>
-              <p className="rw-muted">Wrong answers and burned codes make Margaret nervous. Max it out and she calls the cops.</p>
+              <p className="rw-muted">Burned codes and anything fishy Margaret notices make her nervous. Max it out and she calls the cops.</p>
             </div>
 
             {(done || alarm) && <button className="rw-btn rw-btn-wide" onClick={closeTower}>Back to the road</button>}
