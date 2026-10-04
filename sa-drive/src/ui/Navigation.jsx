@@ -43,6 +43,7 @@ export default function Navigation() {
       <span className="nav-caption" ref={caption} style={{display:'none'}}/>
       {arrived&&<div className="arrival" role="status">You reached {destinations[selected].name} road access!</div>}
     </aside>
+    <div className="nav-dest-label">Heading to <strong>{destinations[selected].name}</strong></div>
     <button className="skip-btn" onClick={handleSkip}>Skip</button>
   </>;
 }
