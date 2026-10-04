@@ -185,6 +185,14 @@ export function alamoSubmitCode(code) {
   });
 }
 
+/** Ask the Raspberry Pi to repeat the hidden keyword without revealing it. */
+export function alamoRepeatKeyword() {
+  return new Promise((resolve) => {
+    if (!socket?.connected) return resolve({ ok: false, error: 'Heist server offline.' });
+    socket.emit('alamo_repeat_keyword', (res) => resolve(res || { ok: false }));
+  });
+}
+
 export function alamoAdminSkip() {
   socket?.emit('alamo_admin_skip');
 }

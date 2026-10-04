@@ -896,6 +896,16 @@ def on_alamo_submit_code(data):
     return {"ok": True, "correct": correct}
 
 
+@socketio.on("alamo_repeat_keyword")
+def on_alamo_repeat_keyword(*_):
+    """Ask the Pi to repeat the keyword without sending it to the browser."""
+    s = _session()
+    ch = get_alamo(s.car_id)
+    queued = ch.repeat_keyword()
+    _flush_alamo(s.car_id, ch)
+    return {"ok": queued}
+
+
 @socketio.on("alamo_admin_skip")
 def on_alamo_admin_skip(*_):
     """Dev: jump straight to ALAMO_DONE."""
