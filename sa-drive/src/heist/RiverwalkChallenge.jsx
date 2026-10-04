@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import {
-  closeRiverwalk, devResetCar, devReplayRiverwalk, restartChallenge, sendFrame, simulate, submitNfc, useHeist,
+  closeRiverwalk, devResetCar, devReplayRiverwalk, replayRiverwalk, restartChallenge, sendFrame, simulate, submitNfc, useHeist,
 } from '../game/heist.js';
 import { HEIST_DEV_TOOLS, PRESAGE_SERVER_URL, RIVERWALK_SERVER_URL } from '../config/heistConfig.js';
 
@@ -195,9 +195,13 @@ export default function RiverwalkChallenge({ videoRef: sharedVideoRef }) {
   const paused = running && (status === 'paused' || camera.state === 'lost');
   const reward = heist.lastReward?.source === 'riverwalk_vault' ? heist.lastReward : null;
   // "cleared": this run's vault was emptied before - finishing again pays nothing.
+  // "replayDone": cracked it again via Play again (no extra loot).
   // "complete": the crew just cracked it and got paid.
-  const cleared = status === 'complete' && heist.riverwalkCleared && !(reward?.amount > 0);
-  const done = status === 'complete' && !cleared;
+  const unpaid = status === 'complete' && !(reward?.amount > 0);
+  const replayDone = unpaid && heist.riverwalkReplay;
+  const cleared = unpaid && heist.riverwalkCleared && !heist.riverwalkReplay;
+  const done = status === 'complete' && !cleared && !replayDone;
+  const finished = done || cleared || replayDone;
   const allChecked = { face: true, nod: true, blink: true, smile: true };
   const checklist = cleared ? allChecked : ch?.checklist ?? { face: false, nod: false, blink: false, smile: false };
 
@@ -238,7 +242,7 @@ export default function RiverwalkChallenge({ videoRef: sharedVideoRef }) {
                 )}
               </>
             )}
-            {(camera.state === 'starting' || camera.state === 'error') && !done && !cleared && (
+            {(camera.state === 'starting' || camera.state === 'error') && !finished && (
               <div className="rw-cam-overlay">
                 <p>{camera.state === 'starting' ? 'Starting camera...' : camera.error}</p>
                 {camera.state === 'error' && <button className="rw-btn" onClick={retryCamera}>Retry camera</button>}
@@ -271,7 +275,15 @@ export default function RiverwalkChallenge({ videoRef: sharedVideoRef }) {
               <div className="rw-cam-overlay rw-cleared">
                 <span className="rw-cleared-badge">ALREADY ROBBED</span>
                 <strong>VAULT EMPTY</strong>
-                <p>Your crew already cleaned out the Riverwalk vault this run. Restart the run (press R) to hit it again.</p>
+                <p>Your crew already cleaned out the Riverwalk vault this run. Hit <strong>Play again</strong> to run the checkpoint once more (no extra loot), or restart the run (press R) for a fresh vault.</p>
+                <p className="rw-muted">Loot so far: {money(heist.cash)}</p>
+              </div>
+            )}
+            {replayDone && (
+              <div className="rw-cam-overlay rw-done">
+                <span className="rw-cleared-badge">REPLAY</span>
+                <strong>VAULT OPEN</strong>
+                <p>Cracked it again! This run&apos;s Riverwalk loot was already collected, so no extra cash.</p>
                 <p className="rw-muted">Loot so far: {money(heist.cash)}</p>
               </div>
             )}
@@ -301,7 +313,7 @@ export default function RiverwalkChallenge({ videoRef: sharedVideoRef }) {
               ))}
             </div>
 
-            {ch?.message && !done && !cleared && <p className="rw-message" aria-live="polite">{ch.message}</p>}
+            {ch?.message && !finished && <p className="rw-message" aria-live="polite">{ch.message}</p>}
 
             {status === 'alarm' && (
               <div className="rw-actions">
@@ -312,10 +324,13 @@ export default function RiverwalkChallenge({ videoRef: sharedVideoRef }) {
             {status === 'idle' && heist.riverwalkConnected && (
               <button className="rw-btn rw-btn-wide" onClick={restartChallenge}>Start checkpoint</button>
             )}
-            {(done || cleared) && (
+            {finished && (
               <>
                 {done && <NfcDeposit />}
-                <button className="rw-btn rw-btn-wide" onClick={closeRiverwalk}>Back to the road</button>
+                <div className="rw-actions">
+                  <button className="rw-btn" onClick={replayRiverwalk} disabled={!heist.riverwalkConnected}>Play again</button>
+                  <button className="rw-btn rw-btn-ghost" onClick={closeRiverwalk}>Back to the road</button>
+                </div>
               </>
             )}
 

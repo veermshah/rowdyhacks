@@ -19,6 +19,7 @@ let state = {
   wantedLevel: 0,
   riverwalkCleared: false,
   riverwalkOpen: false,
+  riverwalkReplay: false, // replaying an already-cleared Riverwalk (Play again)
   openReason: null, // 'arrived' | 'dev'
   challenge: null,
   alarm: null,
@@ -133,8 +134,18 @@ export function openRiverwalk(reason) {
   // Park the car at the checkpoint while the popup is up.
   car.v = 0;
   Object.assign(input, { gas: 0, brake: 0, steer: 0 });
-  set({ riverwalkOpen: true, openReason: reason, alarm: null, lastReward: null, challenge: null });
+  set({ riverwalkOpen: true, openReason: reason, alarm: null, lastReward: null, challenge: null, riverwalkReplay: false });
   if (!state.riverwalkCleared) riverwalkSocket()?.emit('start_challenge', applySnapshot);
+}
+
+/**
+ * Play a finished Riverwalk again. The puzzle runs from the start; this run's
+ * vault loot was already paid, so finishing again pays nothing (no farming).
+ * A full game restart (R) still re-locks the vault with fresh loot.
+ */
+export function replayRiverwalk() {
+  set({ riverwalkReplay: true, alarm: null, lastReward: null, challenge: null });
+  riverwalkSocket()?.emit('start_challenge', applySnapshot);
 }
 
 export function closeRiverwalk() {
