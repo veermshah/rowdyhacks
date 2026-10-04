@@ -230,6 +230,13 @@ class AlamoChallenge:
         self._flush_lcd_rgb_led(now)
         return ["wrong_code"], False
 
+    def repeat_keyword(self):
+        """Queue the current keyword for the Pi without revealing it to the browser."""
+        if self.status != "code" or not self.correct_code:
+            return False
+        self._cmds.append({"type": "speak", "text": self.correct_code})
+        return True
+
     def tick(self, now):
         """Call every ~100ms: evaluates sensor hold timers, the sequence-display
         schedule and scheduled cmds even when no new `input` event has arrived."""

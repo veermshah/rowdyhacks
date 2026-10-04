@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import {
-  closeAlamo, alamoSubmitCode, alamoAdminSkip, alamoAdminReset,
+  closeAlamo, alamoSubmitCode, alamoRepeatKeyword, alamoAdminSkip, alamoAdminReset,
   alamoAdminShowSequence, alamoAdminShowCode, alamoSimInput, useHeist,
 } from '../game/heist.js';
 import { HEIST_DEV_TOOLS } from '../config/heistConfig.js';
@@ -83,6 +83,7 @@ export default function AlamoChallenge() {
   const [revealedSequence, setRevealedSequence] = useState(null); // null (hidden) | string[]
   const [revealedCode, setRevealedCode] = useState(null);
   const [lightSim, setLightSim] = useState(600);
+  const [repeatStatus, setRepeatStatus] = useState('');
 
   const a = heist.alamo;
   const substage = a?.substage ?? 'ALAMO_IDLE';
@@ -128,6 +129,11 @@ export default function AlamoChallenge() {
     if (revealedCode) { setRevealedCode(null); return; }
     setRevealedCode(await alamoAdminShowCode(true) || '????');
   };
+  const repeatKeyword = async () => {
+    setRepeatStatus('Requesting repeat...');
+    const result = await alamoRepeatKeyword();
+    setRepeatStatus(result?.ok ? 'Keyword repeated on vault speaker.' : (result?.error || 'Unable to repeat keyword.'));
+  };
 
   const lightValue = a?.lightValue ?? 0;
   const lightPct = Math.min(100, Math.max(0, (lightValue / LIGHT_MAX) * 100));
@@ -166,6 +172,12 @@ export default function AlamoChallenge() {
           <section className="al-main">
             <p className="al-step-instruction">{stepText}</p>
             <CodeEntry locked={!codeUnlocked} keywordLength={a?.keywordLength ?? 5} onSubmit={alamoSubmitCode} />
+            {codeUnlocked && (
+              <div className="al-repeat-keyword">
+                <button className="rw-btn" onClick={repeatKeyword}>Repeat keyword on vault speaker</button>
+                {repeatStatus && <p role="status">{repeatStatus}</p>}
+              </div>
+            )}
             {done && (
               <div className="al-done-banner">
                 <strong>VAULT OPEN</strong>
