@@ -44,6 +44,18 @@ Edit `.env`:
 - `ALAMO_SERVER_URL` - the deployed game server's URL (Render), or
   `http://localhost:5000` while testing against a local `server/app.py`.
 - `ALAMO_CAR_ID` - matches the car ID the browser joins with (default `solo`).
+- `ALAMO_JOY_SWAP_AXES` - set `true` if physical X and Y are exchanged.
+- `ALAMO_JOY_INVERT_X` / `ALAMO_JOY_INVERT_Y` - set `true` when that axis
+  moves in the opposite direction from the expected direction.
+- `ALAMO_TTS_COMMAND` - installed speech executable, normally `espeak-ng`.
+
+Pair the Bluetooth speaker with the Pi and make it the default audio output.
+Install the speech engine before testing the keyword step:
+
+```sh
+sudo apt install espeak-ng
+espeak-ng "Alamo test"
+```
 
 Run it directly to test:
 
@@ -56,6 +68,10 @@ You should see a `Connected to ... joining as Pi relay` log line, then
 polling (and upgrades to WebSocket when available), which is more reliable
 through Render's proxy. Move the joystick past center and back - you should
 see no spam, just one move per gesture.
+Each detected gesture is logged with its raw `x`/`y` values and mapped
+direction. Move one physical direction, check the logged direction, then
+enable `ALAMO_JOY_SWAP_AXES` or the appropriate `ALAMO_JOY_INVERT_*` setting
+and restart the service. No Arduino reflash is needed for calibration.
 
 The deployed backend for this repository is:
 `https://lootrun-server-haht.onrender.com`. Put that value in
@@ -109,8 +125,10 @@ Pi -> server (Socket.IO `input` events):
 
 Server -> Pi (Socket.IO `cmd` events, `lcd`/`servo` are relayed to the
 Arduino; `rgb`/`led`/`beep` are logged and dropped since there's no RGB LED,
-status LEDs, or buzzer wired on this shield):
+status LEDs, or buzzer wired on this shield; `speak` is played through the
+Pi's configured audio output):
 ```json
 {"type": "lcd", "line1": "...", "line2": "..."}
 {"type": "servo", "state": "open"}
+{"type": "speak", "text": "ALAMO"}
 ```

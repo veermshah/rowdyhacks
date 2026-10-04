@@ -12,70 +12,67 @@ const LIGHT_BLIND_THRESHOLD = 100;
 const LIGHT_MAX = 1023;
 const KEY_TO_MOVE = { ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right' };
 
-function CodeEntry({ locked, codeLength = 4, onSubmit }) {
-  const [digits, setDigits] = useState('');
+function CodeEntry({ locked, keywordLength = 5, onSubmit }) {
+  const [keyword, setKeyword] = useState('');
   const [shake, setShake] = useState(false);
   const wrapRef = useRef(null);
 
   useEffect(() => {
-    if (locked) setDigits('');
+    if (locked) setKeyword('');
   }, [locked]);
 
   const submit = async (value) => {
-    if (value.length !== codeLength) return;
+    if (value.length !== keywordLength) return;
     const res = await onSubmit(value);
     if (res?.correct) {
-      setDigits('');
+      setKeyword('');
     } else {
       setShake(true);
-      setDigits('');
+      setKeyword('');
       setTimeout(() => setShake(false), 500);
     }
   };
 
-  const press = (d) => {
+  const update = (value) => {
     if (locked) return;
-    const next = (digits + d).slice(0, codeLength);
-    setDigits(next);
-    if (next.length === codeLength) submit(next);
+    setKeyword(value.replace(/[^a-z]/gi, '').toUpperCase().slice(0, keywordLength));
   };
-  const backspace = () => !locked && setDigits((d) => d.slice(0, -1));
 
   useEffect(() => {
     const onKey = (e) => {
       if (locked) return;
-      if (/^[0-9]$/.test(e.key)) { e.preventDefault(); e.stopPropagation(); press(e.key); }
-      else if (e.key === 'Backspace') { e.preventDefault(); e.stopPropagation(); backspace(); }
-      else if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); submit(digits); }
+      if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); submit(keyword); }
     };
     const el = wrapRef.current;
     el?.addEventListener('keydown', onKey);
     return () => el?.removeEventListener('keydown', onKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [digits, locked]);
+  }, [keyword, locked]);
 
   return (
     <div ref={wrapRef} className={`al-code-entry ${locked ? 'locked' : ''}`} tabIndex={locked ? -1 : 0}>
       <div className={`al-code-boxes ${shake ? 'shake' : ''}`}>
-        {Array.from({ length: codeLength }, (_, i) => (
-          <span key={i} className="al-code-box">{digits[i] ?? ''}</span>
+        {Array.from({ length: keywordLength }, (_, i) => (
+          <span key={i} className="al-code-box">{keyword[i] ?? ''}</span>
         ))}
       </div>
-      <div className="al-keypad">
-        {['1', '2', '3', '4', '5', '6', '7', '8', '9', '', '0', '<-'].map((k, i) => (
-          k === '' ? <span key={i} /> : (
-            <button
-              key={i}
-              className="al-key"
-              disabled={locked}
-              onClick={() => (k === '<-' ? backspace() : press(k))}
-            >
-              {k}
-            </button>
-          )
-        ))}
-      </div>
-      {locked && <p className="al-code-locked-hint">Locked until the vault reveals the code pieces.</p>}
+      <input
+        className="al-keyword-input"
+        value={keyword}
+        maxLength={keywordLength}
+        disabled={locked}
+        onChange={(e) => update(e.target.value)}
+        onKeyDown={(e) => {
+          e.stopPropagation();
+          if (e.key === 'Enter') submit(keyword);
+        }}
+        placeholder="TYPE THE SPOKEN WORD"
+        aria-label="Spoken keyword"
+      />
+      <button className="rw-btn" disabled={locked || keyword.length !== keywordLength} onClick={() => submit(keyword)}>
+        Submit keyword
+      </button>
+      {locked && <p className="al-code-locked-hint">Locked until the vault speaks the keyword.</p>}
     </div>
   );
 }
@@ -95,7 +92,7 @@ export default function AlamoChallenge() {
     ALAMO_COVER: 'Step 1: Cover the light sensor.',
     ALAMO_SHOW: 'Step 2: Watch the four-move sequence.',
     ALAMO_INPUT: 'Step 2: Repeat the sequence on the joystick.',
-    ALAMO_CODE: 'Step 3: Enter the four-digit code shown on the vault.',
+    ALAMO_CODE: 'Step 3: Type the keyword spoken by the vault.',
     ALAMO_DONE: 'Challenge complete.',
   }[substage] || 'Cover the light sensor to begin.';
 
@@ -168,7 +165,7 @@ export default function AlamoChallenge() {
         <div className="rw-body">
           <section className="al-main">
             <p className="al-step-instruction">{stepText}</p>
-            <CodeEntry locked={!codeUnlocked} codeLength={a?.codeLength ?? 4} onSubmit={alamoSubmitCode} />
+            <CodeEntry locked={!codeUnlocked} keywordLength={a?.keywordLength ?? 5} onSubmit={alamoSubmitCode} />
             {done && (
               <div className="al-done-banner">
                 <strong>VAULT OPEN</strong>

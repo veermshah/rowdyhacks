@@ -119,7 +119,7 @@
 .al-archive-divider { margin: 12px 0; border-top: 1px dashed #8a6a2a66; }
 .al-archive-distractors { opacity: .75; font-style: italic; }
 
-/* Code entry keypad. */
+/* Spoken keyword entry. */
 .al-code-entry { padding: 14px; border-radius: 10px; background: #07101c; border: 1px solid var(--h-line); }
 .al-code-entry.locked { opacity: .5; }
 .al-code-boxes { display: flex; gap: 8px; justify-content: center; margin-bottom: 12px; }
@@ -129,6 +129,8 @@
 .al-key { padding: 12px 0; border: 1px solid var(--h-line); border-radius: 8px; background: #162b3c; color: var(--h-text); font-size: 16px; font-weight: 700; cursor: pointer; }
 .al-key:hover:not(:disabled) { background: #1c3547; }
 .al-key:disabled { opacity: .4; cursor: not-allowed; }
+.al-keyword-input { display: block; width: min(100%, 260px); margin: 0 auto 10px; padding: 12px; border: 1px solid var(--h-line); border-radius: 8px; background: #0c1a28; color: var(--h-text); text-align: center; font-size: 18px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; }
+.al-keyword-input:focus { outline: 2px solid var(--h-accent); outline-offset: 2px; }
 .al-code-locked-hint { margin: 10px 0 0; text-align: center; font-size: 12px; color: var(--h-muted); }
 
 .al-done-banner { margin-top: 4px; padding: 14px; border-radius: 10px; background: #00382cd9; color: var(--h-text); text-align: center; }

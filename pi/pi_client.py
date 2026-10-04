@@ -12,6 +12,8 @@ Start on boot via the included systemd unit (alamo-pi.service) so the relay
 is always running before anyone opens the game in a browser.
 """
 import logging
+import shutil
+import subprocess
 import threading
 import time
 
@@ -26,9 +28,33 @@ log = logging.getLogger("alamo_pi")
 
 sio = socketio.Client(reconnection=True, reconnection_delay=2, reconnection_delay_max=10)
 link = SerialLink(config.SERIAL_PORT, config.BAUD_RATE, config.RECONNECT_DELAY_S)
-joystick = JoystickClassifier(config.JOYSTICK_CENTER_LOW, config.JOYSTICK_CENTER_HIGH)
+joystick = JoystickClassifier(
+    config.JOYSTICK_CENTER_LOW,
+    config.JOYSTICK_CENTER_HIGH,
+    config.JOYSTICK_SWAP_AXES,
+    config.JOYSTICK_INVERT_X,
+    config.JOYSTICK_INVERT_Y,
+)
 
 _last_sent_light = None
+
+
+def _speak(text):
+    if not text:
+        return
+    executable = shutil.which(config.TTS_COMMAND)
+    if executable is None:
+        log.error(
+            "Cannot speak keyword: %r is not installed. Install espeak-ng or set ALAMO_TTS_COMMAND.",
+            config.TTS_COMMAND,
+        )
+        return
+    threading.Thread(
+        target=subprocess.run,
+        args=([executable, text],),
+        kwargs={"check": False, "stdout": subprocess.DEVNULL, "stderr": subprocess.PIPE},
+        daemon=True,
+    ).start()
 
 
 @sio.event
@@ -53,6 +79,8 @@ def on_cmd(data):
     elif cmd_type == "servo":
         angle = config.SERVO_OPEN_ANGLE if data.get("state") == "open" else config.SERVO_CLOSED_ANGLE
         link.send_command(f"SERVO:{angle}")
+    elif cmd_type == "speak":
+        _speak(str(data.get("text") or "").strip())
     elif cmd_type in ("rgb", "led", "beep"):
         log.debug("Dropping %r cmd - no %s hardware wired on this shield", cmd_type, cmd_type)
     else:
@@ -70,8 +98,10 @@ def _serial_loop():
             continue
 
         move = joystick.classify(reading["x"], reading["y"])
-        if move is not None and sio.connected:
-            sio.emit("input", {"device": "joystick", "value": move})
+        if move is not None:
+            log.info("Joystick x=%d y=%d -> %s", reading["x"], reading["y"], move)
+            if sio.connected:
+                sio.emit("input", {"device": "joystick", "value": move})
 
         light = reading["light"]
         if sio.connected and (

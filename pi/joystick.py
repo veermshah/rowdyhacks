@@ -2,17 +2,19 @@
 
 The server's handle_input() (server/alamo_challenge.py) expects an already-
 discrete "up"/"down"/"left"/"right" string per move, not raw analog values.
-Physical up/down/left/right here is just a consistent convention - if it
-doesn't match the real wiring, fix it server-side with JOYSTICK_ORIENTATION
-in server/alamo_config.py rather than here.
+The axis and polarity options are configurable so the physical mounting can
+be corrected without reflashing the Arduino.
 """
 
 
 class JoystickClassifier:
-    def __init__(self, center_low, center_high):
+    def __init__(self, center_low, center_high, swap_axes=False, invert_x=False, invert_y=False):
         self.center_low = center_low
         self.center_high = center_high
         self._active_move = None
+        self.swap_axes = swap_axes
+        self.invert_x = invert_x
+        self.invert_y = invert_y
 
     def _axis_direction(self, value, low_name, high_name):
         if value < self.center_low:
@@ -26,6 +28,14 @@ class JoystickClassifier:
         one axis, or None otherwise. Requires the stick to return to center
         before the next move can fire, so holding it over doesn't spam moves.
         """
+        if self.swap_axes:
+            x, y = y, x
+        center = (self.center_low + self.center_high) // 2
+        if self.invert_x:
+            x = center - (x - center)
+        if self.invert_y:
+            y = center - (y - center)
+
         x_move = self._axis_direction(x, "left", "right")
         y_move = self._axis_direction(y, "up", "down")
 
@@ -36,7 +46,6 @@ class JoystickClassifier:
         if self._active_move is not None:
             return None  # still holding the same gesture
 
-        center = (self.center_low + self.center_high) // 2
         x_dev = abs(x - center) if x_move else 0
         y_dev = abs(y - center) if y_move else 0
         move = x_move if x_dev >= y_dev else y_move

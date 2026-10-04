@@ -14,6 +14,10 @@ def _int(name, default):
     return int(os.getenv(name, str(default)))
 
 
+def _bool(name, default=False):
+    return os.getenv(name, str(default)).strip().lower() in ("1", "true", "yes", "on")
+
+
 SERIAL_PORT = os.getenv("ALAMO_SERIAL_PORT", "/dev/ttyACM0")
 BAUD_RATE = _int("ALAMO_BAUD_RATE", 9600)
 
@@ -29,6 +33,10 @@ if SOCKETIO_TRANSPORT not in ("polling", "websocket"):
 # joystick-follow servo logic (see alamo_vault.ino).
 JOYSTICK_CENTER_LOW = _int("ALAMO_JOY_CENTER_LOW", 460)
 JOYSTICK_CENTER_HIGH = _int("ALAMO_JOY_CENTER_HIGH", 565)
+JOYSTICK_SWAP_AXES = _bool("ALAMO_JOY_SWAP_AXES")
+JOYSTICK_INVERT_X = _bool("ALAMO_JOY_INVERT_X")
+JOYSTICK_INVERT_Y = _bool("ALAMO_JOY_INVERT_Y")
+TTS_COMMAND = os.getenv("ALAMO_TTS_COMMAND", "espeak-ng").strip()
 
 # Only re-emit the light reading once it moves by at least this much, so a
 # noisy ADC doesn't flood the socket every ~150ms.

@@ -488,7 +488,7 @@ class CarState:
     wanted_level: int = 0
     riverwalk_cleared: bool = False
     alamo_cleared: bool = False
-    alamo_code: str = None   # the Alamo vault's 4-digit code, set once on ALAMO_DONE
+    alamo_code: str = None   # the Alamo vault's spoken keyword, set once on ALAMO_DONE
     claimed_tags: set = field(default_factory=set)
 
     def to_dict(self, car_id):
@@ -777,8 +777,8 @@ def on_alamo_start(*_):
 
 @socketio.on("alamo_submit_code")
 def on_alamo_submit_code(data):
-    """Hacker's code-entry keypad (NOT the Pi protocol - the 4-digit code is
-    typed on the website). {"code": "1234"}. The server is the only validator;
+    """Hacker's keyword entry (NOT the Pi protocol - the keyword is spoken by
+    the Pi and typed on the website). {"code": "ALAMO"}. The server is the only validator;
     the correct code is never sent to any non-admin client."""
     s = _session()
     code = (data or {}).get("code") if isinstance(data, dict) else data
@@ -828,7 +828,7 @@ def on_alamo_admin_show_sequence(data):
 
 @socketio.on("alamo_admin_show_code")
 def on_alamo_admin_show_code(data):
-    """Dev: {"show": bool} -> the correct 4-digit code, for the hidden admin panel."""
+    """Dev: {"show": bool} -> the correct keyword, for the hidden admin panel."""
     if not DEV_MODE:
         return {"error": "dev mode disabled"}
     s = _session()

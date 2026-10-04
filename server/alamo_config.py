@@ -1,7 +1,7 @@
 """Alamo vault challenge: every tunable in one place.
 
 Minimal flow: cover the camera (a light sensor) -> repeat a 4-move joystick
-sequence -> type the 4-digit code the vault reveals. No rounds, no hints, no
+sequence -> type the keyword the vault speaks. No rounds, no hints, no
 heat/wanted-level penalty - just the three steps, kept deliberately simple.
 
 Player-facing text calls the light sensor "the camera" (it's a story name -
@@ -17,6 +17,7 @@ SPOTTED_HOLD_S = 0.5         # ...continuously for this long to count as SPOTTED
 
 # --- The joystick sequence ------------------------------------------------------
 SEQUENCE_LENGTH = 4           # one fixed-length sequence, generated randomly per run
+KEYWORDS = ("ALAMO", "BADGER", "CANYON", "DESERT", "FALCON", "MESA", "RANGER", "SUNSET")
 MOVE_DISPLAY_S = 0.8          # how long each move word shows on the LCD
 MOVE_GAP_S = 0.3              # blank gap between move words
 BLIND_TRANSITION_S = 1.5      # "CAMERA BLIND / WATCH CLOSELY" message before the sequence plays
@@ -58,7 +59,7 @@ BRIEFING = (
     "A hidden vault in the Alamo is guarded by a security camera. Your "
     "safecracker has to keep it blinded while repeating the vault's unlock "
     "pattern on the joystick. Once it's cracked, the vault will show a "
-    "4-digit code - type it in to finish the job."
+    "spoken keyword - type it in to finish the job."
 )
 
 # --- Vault LCD status lines (never the sequence; {..} filled at runtime) ------
@@ -69,7 +70,7 @@ LCD_STATUS = {
     "input": ("YOUR TURN", "MOVE {progress}/{total}"),
     "wrong_move": ("WRONG MOVE", "WATCH AGAIN"),
     "spotted": ("SPOTTED!", "COVER THE CAMERA"),
-    "code": ("CODE:", "{code}"),
+    "code": ("SAY KEYWORD", "TYPE ON SITE"),
     "wrong_code": ("ACCESS DENIED", "TRY AGAIN"),
     "done": ("ALAMO CLEARED", "VAULT UNLOCKED"),
 }

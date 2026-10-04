@@ -6,7 +6,7 @@ Minimal flow, no rounds/hints/heat:
     -> ALAMO_SHOW (vault LCD plays a 4-move sequence)
     -> ALAMO_INPUT (player repeats it on the joystick; a mistake or the
        camera being spotted sends it back to ALAMO_COVER/ALAMO_SHOW to retry)
-    -> ALAMO_CODE (vault reveals a 4-digit code on its LCD)
+    -> ALAMO_CODE (vault speaks a keyword)
     -> ALAMO_DONE (hacker typed the matching code on the website)
 
 "Camera" is a story name for the light sensor - there is no real camera.
@@ -17,7 +17,8 @@ The only hardware is a joystick and a light sensor relayed by the Raspberry
 Pi over the existing `input` ({"device": "joystick"|"light", "value": ...})
 and `cmd` ({"type": "lcd"|"rgb"|"led"|"beep"|"servo", ...}) Socket.IO events -
 that wire protocol is fixed by the Pi-side code and is not touched here. The
-4-digit code comes from the HACKER'S WEBSITE, not the Pi - see submit_code().
+spoken keyword is delivered only to the Pi, while the hacker types it on the
+website - see submit_code().
 
 AlamoChallenge is a plain class driven by explicit `now` timestamps (no
 threads, no sockets), so it's fully unit-testable. Methods that advance the
@@ -39,7 +40,7 @@ from alamo_config import (
     EVENT_MESSAGE_S, FLASH_COUNT, FLASH_STEP_S, JOYSTICK_ORIENTATION,
     LCD_MAX_LEN, LCD_MIN_SEND_INTERVAL_S, LCD_STATUS, MOVE_DISPLAY_S,
     MOVE_GAP_S, RGB_MIN_SEND_INTERVAL_S, SEQUENCE_LENGTH, SERVO_OPEN_ON_DONE,
-    SPOTTED_ABOVE, SPOTTED_HOLD_S, WRONG_MOVE_PAUSE_S,
+    SPOTTED_ABOVE, SPOTTED_HOLD_S, WRONG_MOVE_PAUSE_S, KEYWORDS,
 )
 
 log = logging.getLogger(__name__)
@@ -67,7 +68,6 @@ def _validate_lcd_text():
         "LCD_STATUS.spotted[0]": LCD_STATUS["spotted"][0],
         "LCD_STATUS.spotted[1]": LCD_STATUS["spotted"][1],
         "LCD_STATUS.code[0]": LCD_STATUS["code"][0],
-        "LCD_STATUS.code[1] (worst case)": LCD_STATUS["code"][1].format(code="9999"),
         "LCD_STATUS.wrong_code[0]": LCD_STATUS["wrong_code"][0],
         "LCD_STATUS.wrong_code[1]": LCD_STATUS["wrong_code"][1],
         "LCD_STATUS.done[0]": LCD_STATUS["done"][0],
@@ -159,7 +159,7 @@ class AlamoChallenge:
         """First entry (or admin reset): a fresh sequence and a fresh code."""
         self.sequence = [self._rng.choice(MOVES) for _ in range(SEQUENCE_LENGTH)]
         self.progress = 0
-        self.correct_code = f"{self._rng.randint(0, 9999):04d}"
+        self.correct_code = self._rng.choice(KEYWORDS)
 
         # Deliberately NOT resetting light_value/is_covered/_below_since here:
         # they reflect the camera's actual current physical state, which a
@@ -177,7 +177,7 @@ class AlamoChallenge:
     def skip(self, now):
         """Admin: jump straight to ALAMO_DONE."""
         if self.correct_code is None:
-            self.correct_code = f"{self._rng.randint(0, 9999):04d}"
+            self.correct_code = self._rng.choice(KEYWORDS)
         self._enter_done(now)
         self._flush_scheduled(now)
         self._flush_lcd_rgb_led(now, force=True)
@@ -219,7 +219,7 @@ class AlamoChallenge:
         if self.status != "code":
             return [], False
         code = str(code).strip()
-        correct = code == self.correct_code
+        correct = str(code or "").strip().upper() == self.correct_code
         if correct:
             self._enter_done(now)
             self._flush_scheduled(now)
@@ -340,6 +340,7 @@ class AlamoChallenge:
     def _enter_code(self, now):
         self.status = "code"
         self._led_set(red=False, green=False)
+        self._cmds.append({"type": "speak", "text": self.correct_code})
         self._reset_display(now)
 
     def _enter_done(self, now):
@@ -372,8 +373,7 @@ class AlamoChallenge:
             l1, l2 = LCD_STATUS["input"]
             return l1, l2.format(progress=self.progress, total=len(self.sequence))
         if self.status == "code":
-            l1, l2 = LCD_STATUS["code"]
-            return l1, l2.format(code=self.correct_code)
+            return LCD_STATUS["code"]
         if self.status == "done":
             return LCD_STATUS["done"]
         return "", ""
@@ -481,5 +481,5 @@ class AlamoChallenge:
         }
         if include_hacker:
             snap["briefing"] = BRIEFING
-            snap["codeLength"] = len(self.correct_code) if self.correct_code else 4
+            snap["keywordLength"] = len(self.correct_code) if self.correct_code else 5
         return snap

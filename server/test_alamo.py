@@ -142,7 +142,8 @@ def test_completing_the_sequence_reveals_the_code():
     t, events = solve_sequence(ch, 0.0)
     assert events == ["sequence_complete"]
     assert ch.status == "code"
-    assert ch.correct_code is not None and len(ch.correct_code) == 4
+    assert ch.correct_code is not None and ch.correct_code.isalpha()
+    assert any(cmd == {"type": "speak", "text": ch.correct_code} for cmd in ch.pop_cmds())
 
 
 # --------------------------------------------------------------------------- #
@@ -171,14 +172,14 @@ def test_code_submitted_outside_the_code_phase_is_ignored():
     assert events == [] and correct is False
 
 
-def test_code_is_shown_once_revealed_but_the_sequence_never_is():
-    """The vault LCD is meant to show the code once ALAMO_CODE starts (the
-    hacker reads it there) - that's intentional, not a leak. The joystick
-    sequence is the thing that must never reach any client."""
+def test_keyword_is_spoken_once_revealed_but_never_sent_to_the_hacker():
+    """The Pi receives the keyword as speech; the browser only gets a prompt.
+    The joystick sequence and keyword must never reach a normal client."""
     ch = new_challenge()
     t, _ = solve_sequence(ch, 0.0)
     snap = ch.snapshot(t, include_hacker=True)
-    assert ch.correct_code in snap["currentLcdText"][1]
+    assert snap["currentLcdText"] == ["SAY KEYWORD", "TYPE ON SITE"]
+    assert ch.correct_code not in repr(snap)
     assert "sequence" not in snap
     for move in ch.sequence:
         assert move.upper() not in repr(snap)
