@@ -92,6 +92,17 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now alamo-pi
 ```
 
+The relay uses the `dhivyesh123` PipeWire/PulseAudio session for Bluetooth
+speech. Enable that user's audio session to remain available when the relay
+starts at boot:
+
+```sh
+sudo loginctl enable-linger dhivyesh123
+systemctl --user enable --now pipewire pipewire-pulse wireplumber
+sudo systemctl daemon-reload
+sudo systemctl restart alamo-pi
+```
+
 The included unit is configured for this Pi user (`dhivyesh123`) and uses the
 project's `.venv`, so the installed `python-socketio` package is available.
 If the Linux username or repository path is different, edit those values in
