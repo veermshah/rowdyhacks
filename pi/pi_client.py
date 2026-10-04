@@ -64,9 +64,9 @@ def _play_speech(executable, text):
     while waking up. Generating speech first lets us prepend silence without
     changing the spoken keyword.
     """
-    player = shutil.which("aplay")
+    player = shutil.which("paplay")
     if player is None or config.TTS_COMMAND != "espeak-ng":
-        log.info("Playing speech directly with %s%s", executable, " (aplay unavailable)" if player is None else "")
+        log.info("Playing speech directly with %s%s", executable, " (paplay unavailable)" if player is None else "")
         result = subprocess.run(
             [executable, text],
             check=False,
@@ -112,9 +112,17 @@ def _play_speech(executable, text):
             log.error("Fallback speech playback failed with exit code %d: %s", result.returncode, result.stderr.strip())
         return
 
-    log.info("Playing speech through %s with %.1fs lead-in", player, config.TTS_LEAD_IN_S)
+    player_args = [player]
+    if config.TTS_AUDIO_SINK:
+        player_args.extend(["--device", config.TTS_AUDIO_SINK])
+    log.info(
+        "Playing speech through %s%s with %.1fs lead-in",
+        player,
+        f" (sink {config.TTS_AUDIO_SINK})" if config.TTS_AUDIO_SINK else "",
+        config.TTS_LEAD_IN_S,
+    )
     result = subprocess.run(
-        [player, "-q"],
+        player_args,
         input=output.getvalue(),
         check=False,
         stdout=subprocess.DEVNULL,
