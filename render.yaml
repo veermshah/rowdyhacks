@@ -1,0 +1,37 @@
+# Render Blueprint for the Loot Run backend. Connect this repo on Render with
+# "New > Blueprint" and it reads this file automatically - no manual field
+# entry needed beyond the secrets marked `sync: false` below.
+#
+# Socket.IO is already the backend's transport (Flask-SocketIO); this just
+# deploys what's there. Presage is NOT deployed separately - PRESAGE_API_KEY
+# only flips a cosmetic /health flag, no live code path calls it (see
+# server/app.py and server/download_assets.py's setup_presage()).
+services:
+  - type: web
+    name: lootrun-server
+    runtime: python
+    rootDir: server
+    buildCommand: pip install -r requirements.txt && python download_assets.py
+    startCommand: gunicorn -k eventlet -w 1 -b 0.0.0.0:$PORT app:app
+    # -w 1 only: game state (cars, sessions, alamo_challenges in app.py)
+    # lives in plain in-process dicts with no shared store. Multiple workers
+    # or instances would each run a disconnected copy of the game.
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.7
+      # Comma-separated; drives both Flask-CORS and Socket.IO's own CORS
+      # check. Update to your real Vercel domain(s) before going live.
+      - key: CORS_ORIGINS
+        value: https://your-app.vercel.app,http://localhost:5173
+      # Defaults to "1" (dev mode) in app.py if unset, which exposes
+      # admin/dev socket events (skip/reset/sim-input) to any client with no
+      # auth. Set to 0 for a public deploy; leave 1 only if you want those
+      # dev tools live (e.g. at a demo table).
+      - key: RIVERWALK_DEV_MODE
+        value: "0"
+      - key: NFC_SECRET
+        sync: false
+      # Optional, no-op - see the note above. Leave unset unless you want
+      # the /health response's presageConfigured flag to read true.
+      - key: PRESAGE_API_KEY
+        sync: false
