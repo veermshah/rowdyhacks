@@ -1,11 +1,14 @@
 # Render Blueprint for the Loot Run backend. Connect this repo on Render with
 # "New > Blueprint" and it reads this file automatically - no manual field
-# entry needed beyond the secrets marked `sync: false` below.
+# entry needed, nothing here is required to deploy.
 #
 # Socket.IO is already the backend's transport (Flask-SocketIO); this just
-# deploys what's there. Presage is NOT deployed separately - PRESAGE_API_KEY
-# only flips a cosmetic /health flag, no live code path calls it (see
-# server/app.py and server/download_assets.py's setup_presage()).
+# deploys what's there. NFC_SECRET and PRESAGE_API_KEY are both genuinely
+# optional in server/app.py (os.environ.get(..., "")) - NFC_SECRET blank
+# just skips signing/verifying physical loot tags, PRESAGE_API_KEY only
+# flips a cosmetic /health flag and has no live code path. Deliberately left
+# out of this blueprint so Render doesn't prompt for them as required
+# secrets; add either one later in the dashboard if you want them.
 services:
   - type: web
     name: lootrun-server
@@ -29,9 +32,3 @@ services:
       # dev tools live (e.g. at a demo table).
       - key: RIVERWALK_DEV_MODE
         value: "0"
-      - key: NFC_SECRET
-        sync: false
-      # Optional, no-op - see the note above. Leave unset unless you want
-      # the /health response's presageConfigured flag to read true.
-      - key: PRESAGE_API_KEY
-        sync: false
