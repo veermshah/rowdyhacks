@@ -173,6 +173,13 @@ function processResults(results, timestamp) {
   input.leftPalm = left;
   input.rightPalm = right;
   input.handsVisible = true;
+
+  // Hands just returned after being lost — snap gas/brake to driving values
+  // immediately so the car doesn't feel dead while smoothing slowly catches up.
+  if (handsLostAt !== null) {
+    stableGas = input.reverse ? 0.4 : 0.75;
+    stableBrake = 0;
+  }
   handsLostAt = null;
 
   // Check palm separation
