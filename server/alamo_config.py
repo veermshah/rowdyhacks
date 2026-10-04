@@ -76,4 +76,4 @@ LCD_STATUS = {
 }
 
 # Set True to also pop the vault's physical lock on ALAMO_DONE.
-SERVO_OPEN_ON_DONE = False
+SERVO_OPEN_ON_DONE = True
