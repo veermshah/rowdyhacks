@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import {
-  closeRiverwalk, devReplayRiverwalk, restartChallenge, sendFrame, simulate, useHeist,
+  closeRiverwalk, devResetCar, devReplayRiverwalk, restartChallenge, sendFrame, simulate, submitNfc, useHeist,
 } from '../game/heist.js';
 import { HEIST_DEV_TOOLS, HEIST_SERVER_URL } from '../config/heistConfig.js';
 
@@ -8,10 +8,10 @@ const CLUE = 'Acknowledge the guard, signal twice, and look pleased.';
 // Each check stays a mystery until it's passed, so the list never gives away
 // the answer to the clue (nod -> blink twice -> smile).
 const CHECKLIST = [
-  { key: 'face', locked: 'Face scan', done: 'Face detected' },
-  { key: 'nod', locked: 'Security check 1', done: 'Guard acknowledged' },
-  { key: 'blink', locked: 'Security check 2', done: 'Signal received' },
-  { key: 'smile', locked: 'Security check 3', done: 'Guard convinced' },
+  { key: 'face', label: 'Face detected', locked: 'Face scan', done: 'Face detected' },
+  { key: 'nod', label: 'Nod', locked: 'Security check 1', done: 'Guard acknowledged' },
+  { key: 'blink', label: 'Two blinks', locked: 'Security check 2', done: 'Signal received' },
+  { key: 'smile', label: 'Smile', locked: 'Security check 3', done: 'Guard convinced' },
 ];
 const DEV_ACTIONS = [
   ['face', 'Simulate Face Detect'],
@@ -113,6 +113,64 @@ function useFramePump(active, videoRef, canvasRef) {
   }, [active, videoRef, canvasRef]);
 }
 
+function NfcDeposit() {
+  const [value, setValue] = useState('');
+  const [status, setStatus] = useState(null);
+  const [scanning, setScanning] = useState(false);
+  // Web NFC only exists in Chrome on Android over HTTPS; elsewhere paste the tag text.
+  const nfcSupported = 'NDEFReader' in window;
+
+  const deposit = async (payload) => {
+    if (!payload.trim()) return;
+    setStatus({ text: 'Verifying tag...' });
+    const res = await submitNfc(payload.trim());
+    setStatus(res.ok ? { ok: true, text: `Deposited ${money(res.amount)} from tag ${res.tagId}` } : { ok: false, text: res.error });
+    if (res.ok) setValue('');
+  };
+
+  const scan = async () => {
+    try {
+      const reader = new window.NDEFReader();
+      const controller = new AbortController();
+      setScanning(true);
+      setStatus({ text: 'Hold your phone near the Riverwalk loot tag...' });
+      await reader.scan({ signal: controller.signal });
+      reader.onreadingerror = () => setStatus({ ok: false, text: 'Could not read tag - try again.' });
+      reader.onreading = ({ message }) => {
+        const record = message.records.find((r) => r.recordType === 'text');
+        if (!record) return setStatus({ ok: false, text: 'Tag has no text record.' });
+        controller.abort();
+        setScanning(false);
+        deposit(new TextDecoder(record.encoding || 'utf-8').decode(record.data));
+      };
+    } catch (err) {
+      setScanning(false);
+      setStatus({ ok: false, text: `NFC error: ${err.message}` });
+    }
+  };
+
+  return (
+    <div className="rw-nfc">
+      <h3>Physical loot (NFC)</h3>
+      {nfcSupported && (
+        <button className="rw-btn rw-btn-wide" onClick={scan} disabled={scanning}>
+          {scanning ? 'Scanning...' : 'Scan NFC tag'}
+        </button>
+      )}
+      <form className="rw-nfc-form" onSubmit={(e) => { e.preventDefault(); deposit(value); }}>
+        <input
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          placeholder="LOOTRUN|RIVERWALK|TAG01|5000"
+          aria-label="NFC tag payload"
+        />
+        <button className="rw-btn" type="submit">Deposit</button>
+      </form>
+      {status && <p className={`rw-nfc-status ${status.ok ? 'ok' : status.ok === false ? 'err' : ''}`}>{status.text}</p>}
+    </div>
+  );
+}
+
 export default function RiverwalkChallenge({ videoRef: sharedVideoRef }) {
   const heist = useHeist();
   const videoRef = useRef(null);
@@ -161,7 +219,7 @@ export default function RiverwalkChallenge({ videoRef: sharedVideoRef }) {
         </blockquote>
 
         {!heist.connected && (
-          <p className="rw-banner">Heist server offline at {HEIST_SERVER_URL}. Start it with <code>npm start</code> in <code>/server</code>.</p>
+          <p className="rw-banner">Heist server offline at {HEIST_SERVER_URL}. Start it with <code>npm start</code> or <code>python app.py</code> in <code>/server</code>.</p>
         )}
 
         <div className="rw-body">
@@ -219,7 +277,7 @@ export default function RiverwalkChallenge({ videoRef: sharedVideoRef }) {
 
           <aside className="rw-side">
             <ol className="rw-checklist">
-              {CHECKLIST.map(({ key, locked, done: doneLabel }) => {
+              {CHECKLIST.map(({ key, label, locked, done: doneLabel }) => {
                 const isDone = checklist[key];
                 const current = running && ch?.step === key;
                 return (
@@ -227,7 +285,8 @@ export default function RiverwalkChallenge({ videoRef: sharedVideoRef }) {
                     <span className="rw-check" aria-hidden="true">{isDone ? '✓' : current ? '▸' : '○'}</span>
                     {isDone ? doneLabel : locked}
                     {!isDone && key !== 'face' && <span className="rw-lock" aria-hidden="true">???</span>}
-                    <span className="sr-only">{isDone ? ' (done)' : current ? ' (current)' : ''}</span>
+                    {key === 'blink' && current && <span className="rw-count">{ch.blinks}/2</span>}
+                    <span className="sr-only">{isDone ? ` (done: ${label})` : current ? ' (current)' : ''}</span>
                   </li>
                 );
               })}
@@ -252,7 +311,10 @@ export default function RiverwalkChallenge({ videoRef: sharedVideoRef }) {
               <button className="rw-btn rw-btn-wide" onClick={restartChallenge}>Start checkpoint</button>
             )}
             {(done || cleared) && (
-              <button className="rw-btn rw-btn-wide" onClick={closeRiverwalk}>Back to the road</button>
+              <>
+                {done && <NfcDeposit />}
+                <button className="rw-btn rw-btn-wide" onClick={closeRiverwalk}>Back to the road</button>
+              </>
             )}
 
             {HEIST_DEV_TOOLS && (
@@ -264,9 +326,8 @@ export default function RiverwalkChallenge({ videoRef: sharedVideoRef }) {
                       {label}
                     </button>
                   ))}
-                  <button className="rw-dev-btn" onClick={devReplayRiverwalk} disabled={!heist.connected}>
-                    Replay (reset this run)
-                  </button>
+                  <button className="rw-dev-btn" onClick={devResetCar} disabled={!heist.connected}>Reset car loot</button>
+                  <button className="rw-dev-btn" onClick={devReplayRiverwalk} disabled={!heist.connected}>Replay (reset this run)</button>
                 </div>
                 <button className="rw-link" onClick={() => setShowSensors((v) => !v)}>
                   {showSensors ? 'Hide' : 'Show'} sensor readout

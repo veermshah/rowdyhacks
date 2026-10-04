@@ -112,6 +112,22 @@ export function devReplayRiverwalk() {
   });
 }
 
+export function devResetCar() {
+  socket?.emit('reset_car', () => {
+    set({ alarm: null, lastReward: null, challenge: null });
+    if (state.riverwalkOpen) socket?.emit('start_challenge', applySnapshot);
+  });
+}
+
+export function submitNfc(payload) {
+  return new Promise((resolve) => {
+    if (!socket?.connected) return resolve({ ok: false, error: 'Heist server offline.' });
+    socket.timeout(5000).emit('nfc_scan', { payload }, (err, res) =>
+      resolve(err ? { ok: false, error: 'Server did not respond.' } : res)
+    );
+  });
+}
+
 /** New run (game restarted): close the popup and wipe this car's loot, wanted level and vault. */
 export function resetHeistRun() {
   set({ riverwalkOpen: false, alarm: null, lastReward: null, challenge: null, cash: 0, wantedLevel: 0, riverwalkCleared: false });

@@ -1,5 +1,5 @@
 /* Riverwalk heist UI. Palette follows the existing navigation card (index.css). */
-.heist-hud, .heist-dev-skip, .rw-modal {
+.heist-hud, .heist-dev-open, .heist-dev-skip, .rw-modal {
   --h-panel: #0c1a28ee;
   --h-line: #76e9f333;
   --h-text: #e9faff;
@@ -22,6 +22,11 @@
 .heist-conn { width: 7px; height: 7px; border-radius: 50%; background: var(--h-danger); margin-left: auto; }
 .heist-conn.ok { background: var(--h-accent); }
 
+
+/* Dev-only testing shortcut; sits above the Calibrate start screen (z-index 100). */
+.heist-dev-skip { position: fixed; top: 104px; left: 18px; z-index: 110; padding: 8px 12px; border: 1px dashed var(--h-warn); border-radius: 8px; background: #2a1a05e6; color: var(--h-warn); font-size: 11px; font-weight: 700; letter-spacing: .5px; cursor: pointer; }
+.heist-dev-skip:hover { background: #3d2608; }
+.heist-dev-skip:focus-visible { outline: 2px solid var(--h-warn); outline-offset: 2px; }
 
 /* Dev-only testing shortcut; sits above the Calibrate start screen (z-index 100). */
 .heist-dev-skip { position: fixed; top: 104px; left: 18px; z-index: 110; padding: 8px 12px; border: 1px dashed var(--h-warn); border-radius: 8px; background: #2a1a05e6; color: var(--h-warn); font-size: 11px; font-weight: 700; letter-spacing: .5px; cursor: pointer; }
@@ -80,6 +85,13 @@
 .rw-checklist li.done { color: var(--h-accent); border-color: #71e8e7; background: #255660aa; }
 .rw-check { width: 16px; text-align: center; font-weight: 800; }
 .rw-lock { margin-left: auto; font-size: 11px; letter-spacing: 2px; color: #ffffff40; }
+.rw-count { margin-left: auto; color: var(--h-warn); font-variant-numeric: tabular-nums; }
+.rw-nfc { display: flex; flex-direction: column; gap: 8px; padding-top: 12px; border-top: 1px solid var(--h-line); }
+.rw-nfc-form { display: flex; gap: 8px; }
+.rw-nfc-form input { flex: 1; min-width: 0; padding: 9px; border: 1px solid var(--h-line); border-radius: 8px; background: #07101c; color: var(--h-text); font-family: ui-monospace, monospace; font-size: 12px; }
+.rw-nfc-status { font-size: 12px; color: var(--h-muted); }
+.rw-nfc-status.ok { color: var(--h-accent); }
+.rw-nfc-status.err { color: var(--h-danger); }
 .rw-attempts { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--h-muted); }
 .rw-pip { width: 12px; height: 12px; border-radius: 50%; border: 1px solid var(--h-muted); }
 .rw-pip.used { background: var(--h-danger); border-color: var(--h-danger); }
